@@ -71,12 +71,15 @@ hard:
     label: Magnetic Ride Control
     kind: require
     matcher:
-      # 1G1YC3D47P5121316 (Z51, NO MagneRide) carries FE3 and prints no
-      # "MAGNETIC" text — so FE3 = non-magnetic Z51 suspension, and FE2 was
-      # noise (dropped). FE4 = MagneRide per order guide; VERIFY when a
-      # MagneRide car lands.
-      rpo: FE4
-      sticker_text: "MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE"
+      # DISPROVEN 2026-07-16: FE4 is NOT MagneRide. Build-sheet cross-check
+      # (gmpartsgiant) showed FE4 = "SUSPENSION SYSTEM SPECIAL RIDE &
+      # HANDLING" on cars whose complete stickers print no magnetic line —
+      # 13 of 31 ranked cars were FE4 false positives. The printed sticker
+      # line ("MAGNETIC SELECTIVE RIDE...") is the only reliable C8 signal.
+      # F55 is the true MagneRide RPO where GM data carries it (seen on
+      # Cadillac build sheets: "MAGNETO RHEOLOGICAL" damping).
+      rpo: F55
+      sticker_text: "MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE|MAGNETO RHEOLOGICAL"
 
 # --- Soft requirements (weighted penalty curves) --------------------------
 soft:

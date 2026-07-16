@@ -14,3 +14,4 @@ VIN-verified requirements. Full design in PLAN.md — read it before any work.
 
 # Guidelines
 - Any call to an LLM should be structured to maximize cache hit rates. The system prompt should not be artificially inflated to reach the caching minimum for a given model, but the overall query should be assembled in such a way that if it becomes long enough to get cached, it will do so in the best possible way.
+- If a docker container for this project is already running, don't start a new one on top of it. Either use the existing container or rebuild it if necessary. Don't stack them on top of each other.

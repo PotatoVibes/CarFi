@@ -26,6 +26,9 @@ from . import colors, db
 from . import vin as vin_decode
 from .ai import Attribute, HaikuExtractor
 from .budget import BudgetExceeded, BudgetGuard
+from .buildsheet import FOUND as SHEET_FOUND
+from .buildsheet import BuildSheet, BuildSheetFetcher
+from .buildsheet import vehicle_kwargs as sheet_vehicle_kwargs
 from .config import Settings
 from .models import Profile, Provenance, Vehicle
 from .notify import Notifier
@@ -62,6 +65,7 @@ class PipelineStats:
     excluded: int = 0
     conflicts: int = 0
     sticker_capped: bool = False
+    buildsheets_fetched: int = 0  # new network build-sheet fetches this run
     ai_calls: int = 0  # new (non-cached) AI extraction calls this run
     ai_cost_usd: float = 0.0
     ai_budget_exhausted: bool = False
@@ -80,9 +84,13 @@ class Pipeline:
         extractor: HaikuExtractor | None = None,
         notifier: Notifier | None = None,
         notify_threshold: float = 85.0,
+        buildsheet_fetcher: BuildSheetFetcher | None = None,
+        max_buildsheets_per_run: int = 50,
     ):
         self._conn = conn
         self._fetcher = fetcher
+        self._buildsheet = buildsheet_fetcher
+        self._max_buildsheets = max_buildsheets_per_run
         # rescore() needs no source; run() does (guarded).
         self._engine = SyncEngine(conn, source, now=now) if source is not None else None
         self._current_year = current_year
@@ -230,10 +238,17 @@ class Pipeline:
                 return
 
         parsed, sticker_path = self._maybe_sticker(vin, run_id, stats)
-        claimed_features = self._ai_features(
-            vin, parsed, sticker_path, row, attributes, run_id, stats
+        # No sticker -> try the build-sheet decoder (covers pre-2022 cars and
+        # sticker not_founds). Verified evidence, so AI is skipped when found.
+        sheet = self._maybe_buildsheet(vin, run_id, stats) if parsed is None else None
+        claimed_features = (
+            {}
+            if sheet is not None
+            else self._ai_features(vin, parsed, sticker_path, row, attributes, run_id, stats)
         )
-        vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
+        vehicle = self._build_vehicle(
+            vin, profile.model_key, parsed, row, claimed_features, sheet=sheet
+        )
         result = score_vehicle(profile, vehicle)
         self._finish_vin(vin, profile, result, parsed, row, stats)
 
@@ -282,6 +297,21 @@ class Pipeline:
                 )
                 return parsed, result.path
         return None, None
+
+    def _maybe_buildsheet(self, vin: str, run_id: str, stats: PipelineStats) -> BuildSheet | None:
+        """Build-sheet fallback, honoring a per-run network-fetch cap."""
+        if self._buildsheet is None:
+            return None
+        would_network = not self._buildsheet.is_cached(vin)
+        if would_network and stats.buildsheets_fetched >= self._max_buildsheets:
+            return None
+        try:
+            result = self._buildsheet.fetch(vin, run_id=run_id)
+        except BudgetExceeded:
+            return None
+        if not result.from_cache:
+            stats.buildsheets_fetched += 1
+        return result.sheet if result.status == SHEET_FOUND else None
 
     def _ai_features(
         self, vin, parsed, sticker_path, row, attributes, run_id, stats: PipelineStats
@@ -336,14 +366,31 @@ class Pipeline:
         return self._notifier.notify_match(vin, title, body)
 
     def _build_vehicle(
-        self, vin: str, model_key: str, parsed, row, claimed_features: dict[str, str]
+        self,
+        vin: str,
+        model_key: str,
+        parsed,
+        row,
+        claimed_features: dict[str, str],
+        sheet: BuildSheet | None = None,
     ) -> Vehicle:
-        """Merge verified sticker + VIN data with claimed listing/AI data."""
+        """Merge verified sticker/build-sheet + VIN data with claimed data."""
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
         claimed_text = _claimed_text(row)
         facts = vin_decode.decode(vin)
+
+        if parsed is None and sheet is not None:
+            kw = sheet_vehicle_kwargs(sheet)
+            kw["miles"] = miles
+            kw["price"] = price
+            if kw.get("year") is None:
+                kw["year"] = listing_year or vin_decode.model_year(vin)
+            kw["claimed_text"] = claimed_text
+            kw["claimed_features"] = claimed_features
+            kw["vin_facts"] = facts
+            return Vehicle(**kw)
 
         if parsed is not None:
             kw = vehicle_kwargs(parsed, model_key)
@@ -443,6 +490,7 @@ def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pi
     guard = BudgetGuard.from_settings(conn, settings)
     source = AutoDevSource(settings.autodev_api_key, guard) if with_source else None
     fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
+    buildsheet_fetcher = BuildSheetFetcher(conn, guard)
     extractor = (
         HaikuExtractor(conn, guard, settings.anthropic_api_key)
         if settings.anthropic_api_key
@@ -457,6 +505,7 @@ def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pi
         extractor=extractor,
         notifier=notifier,
         notify_threshold=settings.notify_threshold,
+        buildsheet_fetcher=buildsheet_fetcher,
     )
 
 

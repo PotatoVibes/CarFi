@@ -175,6 +175,19 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        7,
+        """
+        -- Build-sheet cache (gmpartsgiant VIN decoder): raw JSON per VIN,
+        -- fetched once ever. status: found | not_found | blocked(transient).
+        CREATE TABLE build_sheets (
+            vin        TEXT PRIMARY KEY,
+            status     TEXT NOT NULL,
+            raw_json   TEXT,
+            fetched_at TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -258,6 +271,24 @@ def sum_cost(conn: sqlite3.Connection, provider: str, start: datetime, end: date
 def get_sticker_status(conn: sqlite3.Connection, vin: str) -> sqlite3.Row | None:
     """Return the recorded fetch outcome for a VIN, or None if never attempted."""
     return conn.execute("SELECT * FROM stickers WHERE vin = ?", (vin,)).fetchone()
+
+
+def get_build_sheet(conn: sqlite3.Connection, vin: str) -> sqlite3.Row | None:
+    """Cached build-sheet fetch outcome for a VIN, or None if never attempted."""
+    return conn.execute("SELECT * FROM build_sheets WHERE vin = ?", (vin,)).fetchone()
+
+
+def record_build_sheet(
+    conn: sqlite3.Connection, vin: str, status: str, raw_json: str | None, ts: datetime
+) -> None:
+    conn.execute(
+        """INSERT INTO build_sheets (vin, status, raw_json, fetched_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(vin) DO UPDATE SET status=excluded.status,
+             raw_json=excluded.raw_json, fetched_at=excluded.fetched_at""",
+        (vin, status, raw_json, _iso(ts)),
+    )
+    conn.commit()
 
 
 def get_parsed_sticker(conn: sqlite3.Connection, vin: str, parser_version: int) -> str | None:

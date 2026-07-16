@@ -602,6 +602,79 @@ def test_truncated_full_pass_skips_delist():
     assert row["missing_passes"] == 0  # absence unproven -> untouched
 
 
+def test_buildsheet_fallback_ranks_manual_blackwing_without_sticker():
+    """Sticker not_found -> the build-sheet decoder supplies verified
+    evidence: manual, ventilated seats, HUD, and the Blackwing model string."""
+    from carfinder.budget import BUILDSHEET
+    from carfinder.buildsheet import BuildSheetFetcher
+
+    vin = "1G6D65RP0X0999999"  # Blackwing engine code P, not sticker-cached
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "buildsheet" / "1G6D65RP8N0460286.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rows = [
+        ListingRow(
+            vin=vin,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2022,
+            make="Cadillac",
+            model="CT4",
+            trim="V Blackwing",
+        )
+    ]
+    conn = db.bootstrap(":memory:")
+    guard = BudgetGuard(
+        conn,
+        {
+            GM_STICKER: ProviderBudget(GM_STICKER, "count", 100),
+            BUILDSHEET: ProviderBudget(BUILDSHEET, "count", 100),
+        },
+    )
+    sticker_fetcher = StickerFetcher(
+        conn,
+        guard,
+        stickers_dir=STICKERS,
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=GM_MISS))
+        ),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    sheet_fetcher = BuildSheetFetcher(
+        conn,
+        guard,
+        client=httpx.Client(
+            base_url=BuildSheetFetcher.BASE_URL,
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=fixture)),
+        ),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    pipe = Pipeline(
+        conn,
+        FakeSource(rows),
+        sticker_fetcher,
+        current_year=2026,
+        now=Clock(),
+        buildsheet_fetcher=sheet_fetcher,
+    )
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    stats = pipe.run(bw, run_id="r1")
+    assert stats.stickers_fetched == 1  # the miss
+    assert stats.buildsheets_fetched == 1  # the fallback
+    m = _match(conn, vin)
+    assert m["verdict"] == "ranked"
+    bd = json.loads(m["breakdown_json"])
+    manual = next(h for h in bd["hard"] if h["key"] == "manual_transmission")
+    assert manual["status"] == "pass" and manual["provenance"] == "verified"
+    vented = next(h for h in bd["hard"] if h["key"] == "ventilated_seats")
+    assert vented["status"] == "pass" and vented["provenance"] == "verified"
+
+
 def test_sticker_cap_scores_on_listing_only():
     # 3LT convertible pattern so the VIN gate passes (a VIN-failed car would
     # be fast-path excluded before the cap is ever consulted).

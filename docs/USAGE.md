@@ -81,10 +81,14 @@ Browsing needs **no API keys** — it only reads the local database.
   --no-scheduler`.) For a headless box, point Windows Task Scheduler or cron at
   `carfinder sync` instead.
 
-**What a sync actually does:** find new/changed listings → for genuinely new cars,
-fetch the free GM window sticker → score against your requirements → save. A car
-that fails a *verified* hard requirement is **excluded**; one that only has
+**What a sync actually does:** find new/changed listings → decode the VIN
+(trim/body/model — instant, free) → for cars passing the VIN gate, fetch the free
+GM window sticker; if GM has no sticker (pre-2022 cars), fall back to the free
+**build-sheet decoder** (gmpartsgiant) → score against your requirements → save.
+A car that fails a *verified* hard requirement is **excluded**; one that only has
 unconfirmed (claimed) evidence lands in **needs review**; the rest are **ranked**.
+One caveat: Chevrolet build sheets omit MagneRide, so that requirement can only
+ever be verified by a window sticker.
 
 ---
 

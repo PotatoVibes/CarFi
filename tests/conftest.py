@@ -186,6 +186,7 @@ def seeded_settings(tmp_path) -> Settings:
         monthly_call_cap_autodev=800,
         monthly_ai_budget_usd=2.0,
         monthly_call_cap_gm=500,
+        monthly_call_cap_buildsheet=500,
         stickers_dir=ROOT / "stickers",
         config_dir=ROOT / "config",
         notify_webhook_url=None,
