@@ -14,6 +14,9 @@ dist/
 # Secrets — NEVER commit
 .env
 
+# Local Cache
+stickers/
+
 # Runtime state (DB lives under ./data, mounted as a volume)
 data/
 *.sqlite
