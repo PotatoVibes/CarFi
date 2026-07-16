@@ -485,6 +485,123 @@ def test_vin_passing_car_still_fetches_sticker():
     assert m["verdict"] == "needs_review"
 
 
+class YearSource:
+    """Serves rows keyed by the vehicle.year param — models Auto.dev's
+    per-query pagination window forcing one walk per model year."""
+
+    name = "autodev"
+
+    def __init__(self, by_year):
+        self.by_year = by_year
+        self.year_params = []
+
+    def search_page(self, params, page=1, sort="createdAt.desc", run_id=None):
+        yp = params.get("vehicle.year")
+        if page == 1:
+            self.year_params.append(yp)
+        rows = self.by_year.get(yp, []) if page == 1 else []
+        return Page(rows=rows, total=None, has_next=False)
+
+
+def _year_row(vin, year):
+    return ListingRow(
+        vin=vin,
+        source="autodev",
+        price=64000,
+        miles=15000,
+        year=year,
+        make="Chevrolet",
+        model="Corvette",
+        trim="Stingray",
+    )
+
+
+def _seed_active_vehicle(conn, vin, model_key="c8_stingray"):
+    ts = "2026-07-01T00:00:00Z"
+    conn.execute(
+        """INSERT INTO vehicles (vin, model_key, status, missing_passes, first_seen, last_seen)
+           VALUES (?, ?, 'active', 0, ?, ?)""",
+        (vin, model_key, ts, ts),
+    )
+    conn.commit()
+
+
+def test_full_pass_walks_each_model_year_separately():
+    """The provider window caps a single query at 2,000 rows; a segmented
+    full pass sees every year's cars and delists only on the union."""
+    a = "1G1YC3D40N5000001"  # 2022 car, served only by the 2022 segment
+    b = "1G1YC3D40P5000002"  # 2023 car, served only by the 2023 segment
+    src = YearSource({"2022-2022": [_year_row(a, 2022)], "2023-2023": [_year_row(b, 2023)]})
+    conn = db.bootstrap(":memory:")
+    guard = BudgetGuard(conn, {GM_STICKER: ProviderBudget(GM_STICKER, "count", 100)})
+    fetcher = StickerFetcher(
+        conn,
+        guard,
+        stickers_dir=STICKERS,
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=GM_MISS))
+        ),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    pipe = Pipeline(conn, src, fetcher, current_year=2026, now=Clock())
+    # A pre-existing active car that no segment returns -> one missed pass.
+    gone = "1G1YC3D40M5000003"
+    _seed_active_vehicle(conn, gone)
+
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    stats = pipe.run(c8, mode="full", run_id="r1")
+
+    # One single-year walk per year in the profile's band (2021..2027).
+    assert src.year_params == [f"{y}-{y}" for y in range(2021, 2028)]
+    assert stats.sync.new_vins == 2  # both years' cars ingested
+    assert stats.sync.truncated is False
+    rows = {
+        r["vin"]: r["missing_passes"]
+        for r in conn.execute("SELECT vin, missing_passes FROM vehicles").fetchall()
+    }
+    # Seen cars untouched; only the truly absent car accrues a miss —
+    # per-segment delisting would have wrongly hit every other year's cars.
+    assert rows[a] == 0 and rows[b] == 0
+    assert rows[gone] == 1
+
+
+def test_truncated_full_pass_skips_delist():
+    """If any segment was cut off, absence is not evidence of a sale."""
+
+    class EndlessSource(YearSource):
+        def search_page(self, params, page=1, sort="createdAt.desc", run_id=None):
+            if params.get("vehicle.year") != "2022-2022":
+                return Page(rows=[], total=None, has_next=False)
+            # 2022 never ends -> hits the page ceiling -> truncated.
+            return Page(rows=[_year_row(f"1G1YC3D40N5{page:06d}", 2022)], total=None, has_next=True)
+
+    conn = db.bootstrap(":memory:")
+    guard = BudgetGuard(conn, {GM_STICKER: ProviderBudget(GM_STICKER, "count", 10000)})
+    fetcher = StickerFetcher(
+        conn,
+        guard,
+        stickers_dir=STICKERS,
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=GM_MISS))
+        ),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    pipe = Pipeline(
+        conn, EndlessSource({}), fetcher, current_year=2026, now=Clock(), max_stickers_per_run=0
+    )
+    gone = "1G1YC3D40M5000003"
+    _seed_active_vehicle(conn, gone)
+
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    stats = pipe.run(c8, mode="full", run_id="r1")
+    assert stats.sync.truncated is True
+    assert stats.sync.presumed_sold == []
+    row = conn.execute("SELECT missing_passes FROM vehicles WHERE vin=?", (gone,)).fetchone()
+    assert row["missing_passes"] == 0  # absence unproven -> untouched
+
+
 def test_sticker_cap_scores_on_listing_only():
     # 3LT convertible pattern so the VIN gate passes (a VIN-failed car would
     # be fast-path excluded before the cap is ever consulted).

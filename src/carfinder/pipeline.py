@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 
@@ -100,9 +102,17 @@ class Pipeline:
         if self._engine is None:
             raise ValueError("run() needs a listing source; none was configured")
         params = build_listing_params(profile, self._current_year)
-        sync_stats = self._engine.sync(
-            params, profile.model_key, mode=mode, run_id=run_id, progress=progress
-        )
+        if mode == "full":
+            # Full passes walk deep, and Auto.dev's pagination window ends at
+            # 2,000 results per query (observed live: page 101 refused). Walk
+            # each model year separately — every year fits the window.
+            sync_stats = self._sync_full_segmented(params, profile, run_id, progress)
+        else:
+            # Incremental stops at the first known page, far inside any
+            # window — a single newest-first walk is correct and cheapest.
+            sync_stats = self._engine.sync(
+                params, profile.model_key, mode=mode, run_id=run_id, progress=progress
+            )
         stats = PipelineStats(sync=sync_stats)
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
@@ -154,6 +164,50 @@ class Pipeline:
                 progress(f"re-scoring {i}/{len(vins)} — {vin}{_eta(started, i - 1, len(vins))}")
             self._process_vin(vin, profile, attributes, run_id, stats)
         return stats
+
+    def _sync_full_segmented(self, params, profile, run_id, progress) -> SyncStats:
+        """One full walk per model year, merged; delist runs once on the union.
+
+        Per-segment delisting would wrongly count every other year's cars as
+        missing, and a truncated walk can't distinguish 'sold' from 'beyond
+        the provider's window' — so delist is skipped entirely on truncation.
+        """
+        years = _segment_years(params.get("vehicle.year"))
+        if not years:  # no year range to slice on — single walk as before
+            return self._engine.sync(
+                params, profile.model_key, mode="full", run_id=run_id, progress=progress
+            )
+
+        base = run_id or uuid4().hex
+        merged = SyncStats(run_id=base, mode="full")
+        for year in years:
+            seg = self._engine.sync(
+                {**params, "vehicle.year": f"{year}-{year}"},
+                profile.model_key,
+                mode="full",
+                run_id=f"{base}-y{year}",
+                progress=(lambda msg, y=year: progress(f"{y}: {msg}")) if progress else None,
+                delist=False,
+            )
+            merged.pages_fetched += seg.pages_fetched
+            merged.new_vins += seg.new_vins
+            merged.updated_vins += seg.updated_vins
+            merged.price_changes += seg.price_changes
+            merged.new_or_changed.extend(seg.new_or_changed)
+            merged.seen_vins.extend(seg.seen_vins)
+            merged.truncated |= seg.truncated
+
+        if merged.truncated:
+            log.warning(
+                "%s full pass truncated — skipping delist detection (absence is "
+                "not evidence of a sale when the walk was incomplete)",
+                profile.model_key,
+            )
+        else:
+            merged.presumed_sold = self._engine.detect_delist(
+                profile.model_key, set(merged.seen_vins)
+            )
+        return merged
 
     def _process_vin(self, vin, profile, attributes, run_id, stats: PipelineStats) -> None:
         row = self._conn.execute(
@@ -416,6 +470,20 @@ def build_pipeline(conn, settings: Settings, current_year: int) -> Pipeline:
 def build_rescore_pipeline(conn, settings: Settings, current_year: int) -> Pipeline:
     """Wire a Pipeline for rescore only (no source, no Auto.dev key needed)."""
     return _build(conn, settings, current_year, with_source=False)
+
+
+def _segment_years(year_param: str | None) -> list[int]:
+    """'2021-2027' -> [2021..2027]; a single year or missing param -> []
+    (no segmentation possible/needed)."""
+    if not year_param:
+        return []
+    m = re.fullmatch(r"(\d{4})-(\d{4})", year_param.strip())
+    if not m:
+        return []
+    lo, hi = int(m.group(1)), int(m.group(2))
+    if hi < lo:
+        return []
+    return list(range(lo, hi + 1))
 
 
 def _claimed_text(row) -> str:

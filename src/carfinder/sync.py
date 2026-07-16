@@ -186,6 +186,17 @@ class SyncEngine:
 
     # -- delist detection (full pass only) -----------------------------------
 
+    def detect_delist(self, model_key: str, seen: set[str]) -> list[str]:
+        """Mark actives missing from `seen` (2 misses -> presumed_sold).
+
+        Callable standalone so a segmented full pass (one walk per model
+        year) can run it once on the UNION of everything seen — running it
+        per segment would wrongly count every other year's cars as missing.
+        """
+        sold = self._detect_delist(model_key, seen)
+        self._conn.commit()
+        return sold
+
     def _detect_delist(self, model_key: str, seen: set[str]) -> list[str]:
         active = self._conn.execute(
             "SELECT vin, missing_passes FROM vehicles WHERE model_key=? AND status='active'",
@@ -216,6 +227,7 @@ class SyncEngine:
         max_pages: int = MAX_PAGES_DEFAULT,
         sort: str = "createdAt.desc",
         progress: Callable[[str], None] | None = None,
+        delist: bool = True,
     ) -> SyncStats:
         run_id = run_id or uuid4().hex
         started = _iso(self._now())
@@ -277,7 +289,7 @@ class SyncEngine:
                 break
             page += 1
 
-        if mode == "full":
+        if mode == "full" and delist:
             stats.presumed_sold = self._detect_delist(model_key, set(stats.seen_vins))
 
         self._conn.execute(

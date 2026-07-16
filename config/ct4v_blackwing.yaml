@@ -119,7 +119,7 @@ highlights:
       # original color-first pattern missed it. Fixed against 0460286.
       sticker_text: "(BRONZE|RED|BLUE).{0,20}CALIPER|CALIPERS?,?\\s*(BRONZE|RED|BLUE)"
   - label: Red seat belts
-    bonus: 1
+    bonus: 3
     matcher:
       sticker_text: "TORCH RED SEAT BELT|RED SEAT BELT"
   - label: Upgraded wheel finish

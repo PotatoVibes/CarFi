@@ -207,6 +207,20 @@ def test_first_page_http_error_raises():
         eng.sync(PARAMS, "c8_stingray", run_id="r1")
 
 
+def test_full_pass_with_delist_false_defers_to_caller():
+    eng, conn, src = _engine([[_row("A", 60000), _row("B", 61000)]])
+    eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1")
+    src.pages = [[_row("A", 60000)]]  # B disappears
+    stats = eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r2", delist=False)
+    assert stats.presumed_sold == []
+    row = conn.execute("SELECT missing_passes FROM vehicles WHERE vin='B'").fetchone()
+    assert row["missing_passes"] == 0  # untouched: caller owns delisting
+    # The caller then runs it once on the union it assembled.
+    sold_after = eng.detect_delist("c8_stingray", set(stats.seen_vins))
+    row = conn.execute("SELECT missing_passes FROM vehicles WHERE vin='B'").fetchone()
+    assert row["missing_passes"] == 1 and sold_after == []  # 1st miss, not sold yet
+
+
 def test_progress_reported_per_page():
     p1 = [_row("A", 60000)]
     p2 = [_row("B", 61000)]
