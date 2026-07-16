@@ -292,6 +292,75 @@ def test_ai_fallback_raises_claimed_features_when_no_sticker():
     assert m["highlight_bonus"] > 0
 
 
+def test_rescore_reapplies_profile_without_a_source():
+    """Editing a profile then rescoring re-ranks existing cars with no sync,
+    no source, and no network."""
+    rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2022,
+            make="Cadillac",
+            model="CT4-V",
+            trim="V-Series Blackwing",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+    before = _match(conn, BW_VIN)["total"]
+
+    # Rescore-only pipeline: no source at all.
+    from carfinder.pipeline import Pipeline as _P
+
+    guard = BudgetGuard(conn, {GM_STICKER: ProviderBudget(GM_STICKER, "count", 100)})
+    fetcher = StickerFetcher(
+        conn,
+        guard,
+        stickers_dir=STICKERS,
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=GM_MISS))
+        ),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    rescorer = _P(conn, None, fetcher, 2026, now=Clock())
+
+    # Tighten the price curve so this car scores lower, then rescore.
+    price = next(c for c in bw.soft if c.key == "price")
+    object.__setattr__(price, "ideal", 40000)
+    object.__setattr__(price, "hard", 45000)
+    stats = rescorer.rescore(bw)
+    after = _match(conn, BW_VIN)["total"]
+    assert stats.scored == 1
+    assert after < before  # profile edit re-applied to the existing car
+
+
+def test_rescore_requires_no_source_but_run_does():
+    conn = db.bootstrap(":memory:")
+    guard = BudgetGuard(conn, {GM_STICKER: ProviderBudget(GM_STICKER, "count", 100)})
+    fetcher = StickerFetcher(
+        conn,
+        guard,
+        stickers_dir=STICKERS,
+        client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404))),
+        min_interval_s=0.0,
+        sleep=lambda s: None,
+    )
+    from carfinder.pipeline import Pipeline as _P
+
+    p = _P(conn, None, fetcher, 2026)
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    # rescore works with no vehicles (no-op); run() must refuse without a source.
+    assert p.rescore(bw).scored == 0
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="listing source"):
+        p.run(bw)
+
+
 def test_sticker_cap_scores_on_listing_only():
     vin = "1G1YAAAAAA5111111"  # not cached -> would hit network
     rows = [

@@ -56,7 +56,7 @@ class Pipeline:
     def __init__(
         self,
         conn: sqlite3.Connection,
-        source: ListingSource,
+        source: ListingSource | None,
         fetcher: StickerFetcher,
         current_year: int,
         now: Callable[[], datetime] | None = None,
@@ -67,7 +67,8 @@ class Pipeline:
     ):
         self._conn = conn
         self._fetcher = fetcher
-        self._engine = SyncEngine(conn, source, now=now)
+        # rescore() needs no source; run() does (guarded).
+        self._engine = SyncEngine(conn, source, now=now) if source is not None else None
         self._current_year = current_year
         self._now = now or (lambda: datetime.now(UTC))
         self._max_stickers = max_stickers_per_run
@@ -81,37 +82,15 @@ class Pipeline:
         mode: str = "incremental",
         run_id: str | None = None,
     ) -> PipelineStats:
+        if self._engine is None:
+            raise ValueError("run() needs a listing source; none was configured")
         params = build_listing_params(profile, self._current_year)
         sync_stats = self._engine.sync(params, profile.model_key, mode=mode, run_id=run_id)
         stats = PipelineStats(sync=sync_stats)
-
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
         for vin in dict.fromkeys(sync_stats.new_or_changed):  # de-dupe, keep order
-            parsed, sticker_path = self._maybe_sticker(vin, sync_stats.run_id, stats)
-            row = self._conn.execute(
-                "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
-                (vin,),
-            ).fetchone()
-            claimed_features = self._ai_features(
-                vin, parsed, sticker_path, row, attributes, sync_stats.run_id, stats
-            )
-            vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
-            result = score_vehicle(profile, vehicle)
-            prior = self._conn.execute(
-                "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
-            ).fetchone()
-            self._persist(vin, profile.model_key, result)
-            self._log_conflicts(vin, profile.model_key, parsed, row)
-            if self._maybe_notify(vin, profile, result, prior):
-                stats.notified += 1
-            stats.scored += 1
-            stats.ranked += result.verdict == "ranked"
-            stats.needs_review += result.verdict == "needs_review"
-            stats.excluded += result.verdict == "excluded"
-            stats.conflicts += self._conn.execute(
-                "SELECT COUNT(*) FROM conflicts WHERE vin=?", (vin,)
-            ).fetchone()[0]
+            self._process_vin(vin, profile, attributes, sync_stats.run_id, stats)
 
         if stats.sticker_capped:
             log.warning(
@@ -120,6 +99,51 @@ class Pipeline:
                 self._max_stickers,
             )
         return stats
+
+    def rescore(self, profile: Profile, run_id: str = "rescore") -> PipelineStats:
+        """Re-score every known vehicle for a profile without syncing.
+
+        For cars processed before, sticker and AI results are cache hits, so
+        this makes ~zero network calls — the way to apply a profile edit to the
+        whole existing set. (A genuinely new AI attribute list can miss cache
+        and spend, but that stays gated by BudgetGuard.)"""
+        stats = PipelineStats(sync=SyncStats(run_id=run_id, mode="rescore"))
+        attributes = _profile_attributes(profile) if self._extractor is not None else []
+        vins = [
+            r["vin"]
+            for r in self._conn.execute(
+                "SELECT vin FROM vehicles WHERE model_key = ?", (profile.model_key,)
+            ).fetchall()
+        ]
+        for vin in vins:
+            self._process_vin(vin, profile, attributes, run_id, stats)
+        return stats
+
+    def _process_vin(self, vin, profile, attributes, run_id, stats: PipelineStats) -> None:
+        parsed, sticker_path = self._maybe_sticker(vin, run_id, stats)
+        row = self._conn.execute(
+            "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
+            (vin,),
+        ).fetchone()
+        claimed_features = self._ai_features(
+            vin, parsed, sticker_path, row, attributes, run_id, stats
+        )
+        vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
+        result = score_vehicle(profile, vehicle)
+        prior = self._conn.execute(
+            "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
+        ).fetchone()
+        self._persist(vin, profile.model_key, result)
+        self._log_conflicts(vin, profile.model_key, parsed, row)
+        if self._maybe_notify(vin, profile, result, prior):
+            stats.notified += 1
+        stats.scored += 1
+        stats.ranked += result.verdict == "ranked"
+        stats.needs_review += result.verdict == "needs_review"
+        stats.excluded += result.verdict == "excluded"
+        stats.conflicts += self._conn.execute(
+            "SELECT COUNT(*) FROM conflicts WHERE vin=?", (vin,)
+        ).fetchone()[0]
 
     # -- steps ---------------------------------------------------------------
 
@@ -294,15 +318,9 @@ class Pipeline:
         self._conn.commit()
 
 
-def build_pipeline(
-    conn, settings: Settings, current_year: int, guard: BudgetGuard | None = None
-) -> Pipeline:
-    """Wire a live Pipeline from settings (Auto.dev + GM stickers + optional
-    Haiku + optional webhook). Raises ValueError if the Auto.dev key is absent."""
-    if not settings.autodev_api_key:
-        raise ValueError("AUTODEV_API_KEY is required to sync")
-    guard = guard or BudgetGuard.from_settings(conn, settings)
-    source = AutoDevSource(settings.autodev_api_key, guard)
+def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pipeline:
+    guard = BudgetGuard.from_settings(conn, settings)
+    source = AutoDevSource(settings.autodev_api_key, guard) if with_source else None
     fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
     extractor = (
         HaikuExtractor(conn, guard, settings.anthropic_api_key)
@@ -319,6 +337,18 @@ def build_pipeline(
         notifier=notifier,
         notify_threshold=settings.notify_threshold,
     )
+
+
+def build_pipeline(conn, settings: Settings, current_year: int) -> Pipeline:
+    """Wire a live sync Pipeline from settings. Requires the Auto.dev key."""
+    if not settings.autodev_api_key:
+        raise ValueError("AUTODEV_API_KEY is required to sync")
+    return _build(conn, settings, current_year, with_source=True)
+
+
+def build_rescore_pipeline(conn, settings: Settings, current_year: int) -> Pipeline:
+    """Wire a Pipeline for rescore only (no source, no Auto.dev key needed)."""
+    return _build(conn, settings, current_year, with_source=False)
 
 
 def _claimed_text(row) -> str:

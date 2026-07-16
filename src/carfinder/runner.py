@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .config import Settings
 from .models import Profile
-from .pipeline import PipelineStats, build_pipeline
+from .pipeline import PipelineStats, build_pipeline, build_rescore_pipeline
 from .profiles import ProfileError, load_profile
 
 
@@ -39,4 +39,20 @@ def run_sync(
     results: dict[str, PipelineStats] = {}
     for profile in load_profiles(config_dir):
         results[profile.model_key] = pipeline.run(profile, mode=mode)
+    return results
+
+
+def run_rescore(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    current_year: int,
+    config_dir: str | Path = "config",
+) -> dict[str, PipelineStats]:
+    """Re-score every known vehicle against the current profiles — no sync, no
+    Auto.dev key needed, ~zero network (cached sticker/AI). Use after editing a
+    profile to re-rank cars already in the database."""
+    pipeline = build_rescore_pipeline(conn, settings, current_year)
+    results: dict[str, PipelineStats] = {}
+    for profile in load_profiles(config_dir):
+        results[profile.model_key] = pipeline.rescore(profile)
     return results

@@ -74,6 +74,32 @@ def sync(full: bool = False) -> None:
 
 
 @app.command()
+def rescore() -> None:
+    """Re-score every car in the database against the current profiles.
+
+    Run this after editing a profile YAML — it re-ranks the existing cars using
+    cached sticker/AI data, so it makes ~zero API calls and no Auto.dev key is
+    needed."""
+    from datetime import UTC, datetime
+
+    from .runner import run_rescore
+
+    settings = load_settings()
+    conn = bootstrap(settings.db_path)
+    try:
+        results = run_rescore(
+            conn, settings, datetime.now(UTC).year, config_dir=settings.config_dir
+        )
+    finally:
+        conn.close()
+    for model_key, s in results.items():
+        typer.echo(
+            f"  {model_key}: re-scored {s.scored} ({s.ranked} ranked, "
+            f"{s.needs_review} review, {s.excluded} excluded)"
+        )
+
+
+@app.command()
 def serve(host: str = "127.0.0.1", port: int = 8000, no_scheduler: bool = False) -> None:
     """Start the web UI (and, unless --no-scheduler, the sync scheduler)."""
     import uvicorn

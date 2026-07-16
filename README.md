@@ -2,7 +2,10 @@
 
 Personal tool to find a C8 Corvette Stingray or Cadillac CT4-V Blackwing meeting
 strict, VIN-verified requirements. Deterministic-first; AI only where unstructured
-text forces it. Full design in [PLAN.md](PLAN.md).
+text forces it.
+
+**New here? Read the [how-to-use guide](docs/USAGE.md).** Full design in
+[PLAN.md](PLAN.md).
 
 ## Setup
 
