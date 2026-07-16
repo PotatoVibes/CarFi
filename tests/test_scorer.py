@@ -226,6 +226,61 @@ def test_year_min_gate():
     assert score_vehicle(p, Vehicle(year=None)).verdict == "needs_review"
 
 
+# --- AI claimed_features (M5) ----------------------------------------------
+
+
+def test_claimed_feature_satisfies_soft_but_not_hard():
+    p = _one_require_profile()  # hard require z51 (key "z51")
+    # AI says the dealer claims Z51 -> promising, but claimed can't pass a hard req.
+    v = Vehicle(claimed_features={"z51": "claimed"})
+    r = score_vehicle(p, v)
+    assert r.verdict == "needs_review"
+    assert r.hard[0].status == "needs_review"
+    assert r.hard[0].provenance == Provenance.claimed
+
+
+def test_claimed_feature_highlight_adds_bonus():
+    p = Profile(
+        name="t",
+        model_key="c8_stingray",
+        highlights=[
+            Highlight(label="Front lift", bonus=8, matcher=Matcher(sticker_text="FRONT LIFT"))
+        ],
+    )
+    # Keyed by the highlight label; AI claim lights up the badge + bonus.
+    v = Vehicle(claimed_features={"Front lift": "claimed"})
+    r = score_vehicle(p, v)
+    assert r.highlight_bonus == pytest.approx(8.0)
+    assert r.highlights[0].matched is True
+    assert r.highlights[0].provenance == Provenance.claimed
+
+
+def test_verified_sticker_overrides_ai_claim():
+    # Complete sticker says the option is absent; an AI "claimed" must not win.
+    p = _one_require_profile()
+    v = Vehicle(
+        verified_text="no perf pkg here",
+        sticker_complete=True,
+        claimed_features={"z51": "claimed"},
+    )
+    r = score_vehicle(p, v)
+    assert r.verdict == "excluded"  # verified-absent beats the AI claim
+
+
+def test_ai_denied_does_not_add_bonus():
+    p = Profile(
+        name="t",
+        model_key="c8_stingray",
+        highlights=[
+            Highlight(label="Front lift", bonus=8, matcher=Matcher(sticker_text="FRONT LIFT"))
+        ],
+    )
+    v = Vehicle(claimed_features={"Front lift": "denied"})
+    r = score_vehicle(p, v)
+    assert r.highlight_bonus == 0.0
+    assert r.highlights[0].matched is False
+
+
 # --- exclude_beyond_hard ---------------------------------------------------
 
 

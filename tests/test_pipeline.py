@@ -232,6 +232,66 @@ def test_conflicts_rewritten_idempotently_on_rerun():
     assert first == second == 1  # year conflict only, not duplicated
 
 
+def test_ai_fallback_raises_claimed_features_when_no_sticker():
+    """No sticker for this VIN -> Haiku reads the dealer text and its claimed
+    features flow into scoring (needs_review, never a verified pass)."""
+    import httpx as _httpx
+
+    from carfinder.ai import HaikuExtractor
+    from carfinder.budget import ANTHROPIC, ProviderBudget
+
+    vin = "1G1YQQQQQQ5222222"  # no GM sticker
+    rows = [
+        ListingRow(
+            vin=vin,
+            source="autodev",
+            price=64000,
+            miles=15000,
+            year=2024,
+            make="Chevrolet",
+            model="Corvette",
+            trim="Stingray Convertible 3LT Z51",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+
+    # Attach a mocked Haiku extractor: it claims every requested attribute.
+    def ai_handler(request):
+        import json
+
+        body = json.loads(request.content)
+        schema = body["output_config"]["format"]["schema"]
+        feats = {k: "claimed" for k in schema["properties"]}
+        return _httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": json.dumps(feats)}],
+                "usage": {"input_tokens": 500, "output_tokens": 40},
+            },
+        )
+
+    ai_guard = BudgetGuard(conn, {ANTHROPIC: ProviderBudget(ANTHROPIC, "cost", 2.0)})
+    pipe._extractor = HaikuExtractor(
+        conn,
+        ai_guard,
+        "key",
+        client=_httpx.Client(transport=_httpx.MockTransport(ai_handler)),
+    )
+
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    stats = pipe.run(c8, run_id="r1")
+    assert stats.ai_calls == 1
+    assert stats.ai_cost_usd > 0
+    m = _match(conn, vin)
+    # Every hard req is claimed-only -> needs_review (AI never satisfies hard).
+    assert m["verdict"] == "needs_review"
+    bd = json.loads(m["breakdown_json"])
+    z51 = next(h for h in bd["hard"] if h["key"] == "z51")
+    assert z51["status"] == "needs_review" and z51["provenance"] == "claimed"
+    # Highlights the AI claimed should badge (claimed provenance).
+    assert m["highlight_bonus"] > 0
+
+
 def test_sticker_cap_scores_on_listing_only():
     vin = "1G1YAAAAAA5111111"  # not cached -> would hit network
     rows = [
