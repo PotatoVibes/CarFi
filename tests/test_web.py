@@ -108,6 +108,17 @@ def test_full_sync_without_key_flashes(seeded_settings):
     assert "flash=" in r.headers["location"]
 
 
+def test_sync_summary_flags_truncation():
+    from carfinder.pipeline import PipelineStats
+    from carfinder.sync import SyncStats
+    from carfinder.web import _summarize_sync
+
+    full = PipelineStats(sync=SyncStats(run_id="r", mode="incremental", new_vins=3))
+    assert "incomplete" not in _summarize_sync({"a": full})
+    cut = PipelineStats(sync=SyncStats(run_id="r", mode="incremental", truncated=True))
+    assert "incomplete" in _summarize_sync({"a": cut})
+
+
 def test_job_status_idle(seeded_settings):
     job = _client(seeded_settings).get("/api/job").json()["job"]
     assert job["state"] == "idle"

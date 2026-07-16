@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,11 +30,23 @@ from .query import build_listing_params
 from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
 from .sources import AutoDevSource, ListingSource
-from .sticker_parser import parse_sticker, vehicle_kwargs
+from .sticker_parser import PARSER_VERSION, ParsedSticker, parse_sticker, vehicle_kwargs
 from .stickers import FOUND, StickerFetcher
 from .sync import SyncEngine, SyncStats
 
 log = logging.getLogger("carfinder.pipeline")
+
+
+def _eta(start: float, done: int, total: int) -> str:
+    """Progress suffix like ' · ~2m left', once enough samples exist."""
+    if done < 3 or total <= done:
+        return ""
+    remain_s = (time.monotonic() - start) / done * (total - done)
+    if remain_s < 5:
+        return ""
+    if remain_s < 90:
+        return f" · ~{remain_s:.0f}s left"
+    return f" · ~{remain_s / 60:.0f}m left"
 
 
 @dataclass
@@ -93,9 +106,10 @@ class Pipeline:
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
         todo = list(dict.fromkeys(sync_stats.new_or_changed))  # de-dupe, keep order
+        started = time.monotonic()
         for i, vin in enumerate(todo, 1):
             if progress is not None:
-                progress(f"scoring {i}/{len(todo)} — {vin}")
+                progress(f"scoring {i}/{len(todo)} — {vin}{_eta(started, i - 1, len(todo))}")
             self._process_vin(vin, profile, attributes, sync_stats.run_id, stats)
 
         if stats.sticker_capped:
@@ -120,15 +134,23 @@ class Pipeline:
         and spend, but that stays gated by BudgetGuard.)"""
         stats = PipelineStats(sync=SyncStats(run_id=run_id, mode="rescore"))
         attributes = _profile_attributes(profile) if self._extractor is not None else []
+        # Best-first: active cars before sold, higher prior score first. The
+        # per-run sticker-fetch cap then spends its budget on the most
+        # promising cars instead of whatever happened to sync first.
         vins = [
             r["vin"]
             for r in self._conn.execute(
-                "SELECT vin FROM vehicles WHERE model_key = ?", (profile.model_key,)
+                """SELECT v.vin FROM vehicles v
+                   LEFT JOIN match_results m ON m.vin = v.vin
+                   WHERE v.model_key = ?
+                   ORDER BY (v.status = 'active') DESC, m.total DESC NULLS LAST""",
+                (profile.model_key,),
             ).fetchall()
         ]
+        started = time.monotonic()
         for i, vin in enumerate(vins, 1):
             if progress is not None:
-                progress(f"re-scoring {i}/{len(vins)} — {vin}")
+                progress(f"re-scoring {i}/{len(vins)} — {vin}{_eta(started, i - 1, len(vins))}")
             self._process_vin(vin, profile, attributes, run_id, stats)
         return stats
 
@@ -163,7 +185,9 @@ class Pipeline:
     def _maybe_sticker(self, vin: str, run_id: str, stats: PipelineStats):
         """Fetch + parse the sticker, honoring the per-run network-fetch cap.
 
-        Returns (parsed_or_None, pdf_path_or_None)."""
+        Parses are cached in the DB (PDFs are immutable per VIN), so a car is
+        pdfplumber-parsed once ever — rescores hit the cache. Returns
+        (parsed_or_None, pdf_path_or_None)."""
         would_network = not self._fetcher.is_cached(vin)
         if would_network and stats.stickers_fetched >= self._max_stickers:
             stats.sticker_capped = True
@@ -172,10 +196,18 @@ class Pipeline:
         if not result.from_cache:
             stats.stickers_fetched += 1
         if result.status == FOUND and result.path is not None:
+            cached = db.get_parsed_sticker(self._conn, vin, PARSER_VERSION)
+            if cached is not None:
+                return ParsedSticker.from_json(cached), result.path
             try:
-                return parse_sticker(result.path), result.path
+                parsed = parse_sticker(result.path)
             except Exception as exc:  # a bad PDF must not crash the whole run
                 log.warning("sticker parse failed for %s: %s", vin, exc)
+            else:
+                db.put_parsed_sticker(
+                    self._conn, vin, PARSER_VERSION, parsed.to_json(), self._now()
+                )
+                return parsed, result.path
         return None, None
 
     def _ai_features(

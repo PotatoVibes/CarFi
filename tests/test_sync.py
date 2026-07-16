@@ -153,6 +153,60 @@ def test_reappearing_vin_resets_missing_passes():
     assert conn.execute("SELECT status FROM vehicles WHERE vin='B'").fetchone()[0] == "active"
 
 
+def test_page_ceiling_sets_truncated():
+    p1 = [_row("A", 60000)]
+    p2 = [_row("B", 61000)]  # never reached
+    eng, _, _ = _engine([p1, p2])
+    stats = eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1", max_pages=1)
+    assert stats.truncated is True
+    assert stats.pages_fetched == 1
+    assert stats.new_vins == 1  # page-1 results kept
+
+
+def test_natural_end_is_not_truncated():
+    eng, _, _ = _engine([[_row("A", 60000)], [_row("B", 61000)]])
+    stats = eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1")
+    assert stats.truncated is False
+    assert stats.pages_fetched == 2
+
+
+def test_midwalk_http_error_keeps_partial_results():
+    import httpx
+
+    class FlakySource(FakeSource):
+        def search_page(self, params, page=1, sort="createdAt.desc", run_id=None):
+            if page == 2:
+                req = httpx.Request("GET", "http://api/listings")
+                raise httpx.HTTPStatusError(
+                    "boom", request=req, response=httpx.Response(500, request=req)
+                )
+            return super().search_page(params, page, sort, run_id)
+
+    conn = db.bootstrap(":memory:")
+    src = FlakySource([[_row("A", 60000)], [_row("B", 61000)]])
+    eng = SyncEngine(conn, src, now=Clock())
+    stats = eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1")
+    assert stats.truncated is True
+    assert stats.new_vins == 1  # page 1 ingested, run not lost
+    assert conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 1
+
+
+def test_first_page_http_error_raises():
+    import httpx
+    import pytest
+
+    class DeadSource(FakeSource):
+        def search_page(self, params, page=1, sort="createdAt.desc", run_id=None):
+            req = httpx.Request("GET", "http://api/listings")
+            raise httpx.HTTPStatusError(
+                "unauthorized", request=req, response=httpx.Response(401, request=req)
+            )
+
+    eng = SyncEngine(db.bootstrap(":memory:"), DeadSource([]), now=Clock())
+    with pytest.raises(httpx.HTTPStatusError):
+        eng.sync(PARAMS, "c8_stingray", run_id="r1")
+
+
 def test_progress_reported_per_page():
     p1 = [_row("A", 60000)]
     p2 = [_row("B", 61000)]

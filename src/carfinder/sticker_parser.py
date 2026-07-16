@@ -28,6 +28,10 @@ log = logging.getLogger("carfinder.sticker_parser")
 # verified option list is authoritative and absence means absent.
 COMPLETE_THRESHOLD = 0.8
 
+# Bump whenever parsing logic changes — invalidates the parsed_stickers cache
+# so every PDF gets re-parsed with the new rules.
+PARSER_VERSION = 1
+
 _JSON_START = re.compile(r'\{"maker"')
 _RPO_TOKEN = re.compile(r'"([A-Z0-9]{2,3})"')
 _MSRP = re.compile(r"TOTAL VEHICLE PRICE\*?\s*\$\s*([\d,]+(?:\.\d{2})?)")
@@ -58,6 +62,16 @@ class ParsedSticker:
     @property
     def complete(self) -> bool:
         return self.confidence >= COMPLETE_THRESHOLD
+
+    def to_json(self) -> str:
+        d = self.__dict__ | {"options": sorted(self.options)}
+        return json.dumps(d, separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, raw: str) -> ParsedSticker:
+        d = json.loads(raw)
+        d["options"] = set(d.get("options", []))
+        return cls(**d)
 
 
 def _extract_json_blob(text: str) -> dict | None:

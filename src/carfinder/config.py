@@ -48,15 +48,18 @@ class Settings:
 def load_settings(env_file: Path | None = None) -> Settings:
     """Load settings, reading .env at the repo root first (if present)."""
     _load_dotenv(env_file if env_file is not None else _REPO_ROOT / ".env")
+    # `or default` (not just .get default) so an env var set to "" — e.g. a
+    # blank .env placeholder passed through docker's env_file — falls back
+    # instead of producing Path("") / int("").
     return Settings(
-        db_path=Path(os.environ.get("CARFINDER_DB_PATH", "data/carfinder.sqlite")),
+        db_path=Path(os.environ.get("CARFINDER_DB_PATH") or "data/carfinder.sqlite"),
         autodev_api_key=os.environ.get("AUTODEV_API_KEY") or None,
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
-        monthly_call_cap_autodev=int(os.environ.get("MONTHLY_CALL_CAP_AUTODEV", "800")),
-        monthly_ai_budget_usd=float(os.environ.get("MONTHLY_AI_BUDGET_USD", "2")),
-        monthly_call_cap_gm=int(os.environ.get("MONTHLY_CALL_CAP_GM", "500")),
-        stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR", "stickers")),
-        config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR", "config")),
+        monthly_call_cap_autodev=int(os.environ.get("MONTHLY_CALL_CAP_AUTODEV") or "800"),
+        monthly_ai_budget_usd=float(os.environ.get("MONTHLY_AI_BUDGET_USD") or "2"),
+        monthly_call_cap_gm=int(os.environ.get("MONTHLY_CALL_CAP_GM") or "500"),
+        stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR") or "stickers"),
+        config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR") or "config"),
         notify_webhook_url=os.environ.get("NOTIFY_WEBHOOK_URL") or None,
-        notify_threshold=float(os.environ.get("NOTIFY_THRESHOLD", "85")),
+        notify_threshold=float(os.environ.get("NOTIFY_THRESHOLD") or "85"),
     )

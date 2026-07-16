@@ -361,6 +361,69 @@ def test_rescore_requires_no_source_but_run_does():
         p.run(bw)
 
 
+def test_parsed_sticker_cached_across_runs(monkeypatch):
+    """pdfplumber parsing happens once per VIN ever — reruns hit the DB cache."""
+    import carfinder.pipeline as pl
+
+    calls = []
+    real_parse = pl.parse_sticker
+    monkeypatch.setattr(pl, "parse_sticker", lambda p: (calls.append(1), real_parse(p))[1])
+
+    rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2022,
+            make="Cadillac",
+            model="CT4-V",
+            trim="Blackwing",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+    assert len(calls) == 1
+    # Price change so the VIN re-processes; the parse must come from cache.
+    pipe._engine._source.rows = [
+        ListingRow(vin=BW_VIN, source="autodev", price=55000, miles=30000, year=2022)
+    ]
+    pipe.run(bw, run_id="r2")
+    assert len(calls) == 1  # no re-parse
+    # And the cached result scores identically (still ranked).
+    assert _match(conn, BW_VIN)["verdict"] == "ranked"
+
+
+def test_rescore_processes_best_active_cars_first():
+    """The sticker-fetch budget goes to promising active cars, not sync order."""
+    pipe, conn = _pipeline([])
+    ts = "2026-07-15T12:00:00Z"
+    cars = [  # (vin, status, prior_total)
+        ("VINLOW000000000A1", "active", 50.0),
+        ("VINHIGH00000000B2", "active", 90.0),
+        ("VINSOLD00000000C3", "presumed_sold", 100.0),
+    ]
+    for vin, status, total in cars:
+        conn.execute(
+            """INSERT INTO vehicles (vin, model_key, status, missing_passes,
+               first_seen, last_seen) VALUES (?, 'c8_stingray', ?, 0, ?, ?)""",
+            (vin, status, ts, ts),
+        )
+        conn.execute(
+            """INSERT INTO match_results (vin, model_key, verdict, soft_score,
+               highlight_bonus, total, breakdown_json, scored_at)
+               VALUES (?, 'c8_stingray', 'needs_review', ?, 0, ?, '{}', ?)""",
+            (vin, total, total, ts),
+        )
+    conn.commit()
+    seen: list[str] = []
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    pipe.rescore(c8, progress=lambda msg: seen.append(msg.split("— ")[1].split(" ")[0]))
+    # Active best-first, sold last.
+    assert seen == ["VINHIGH00000000B2", "VINLOW000000000A1", "VINSOLD00000000C3"]
+
+
 def test_sticker_cap_scores_on_listing_only():
     vin = "1G1YAAAAAA5111111"  # not cached -> would hit network
     rows = [

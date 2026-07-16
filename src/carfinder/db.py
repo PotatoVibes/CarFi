@@ -162,6 +162,19 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        6,
+        """
+        -- Parsed-sticker cache: pdfplumber output is deterministic per PDF, so
+        -- parse once and reuse. parser_version invalidates on parser changes.
+        CREATE TABLE parsed_stickers (
+            vin            TEXT    PRIMARY KEY,
+            parser_version INTEGER NOT NULL,
+            parsed_json    TEXT    NOT NULL,
+            parsed_at      TEXT    NOT NULL
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -245,6 +258,28 @@ def sum_cost(conn: sqlite3.Connection, provider: str, start: datetime, end: date
 def get_sticker_status(conn: sqlite3.Connection, vin: str) -> sqlite3.Row | None:
     """Return the recorded fetch outcome for a VIN, or None if never attempted."""
     return conn.execute("SELECT * FROM stickers WHERE vin = ?", (vin,)).fetchone()
+
+
+def get_parsed_sticker(conn: sqlite3.Connection, vin: str, parser_version: int) -> str | None:
+    """Cached parse JSON for a VIN, or None if absent or from an older parser."""
+    row = conn.execute(
+        "SELECT parsed_json FROM parsed_stickers WHERE vin = ? AND parser_version = ?",
+        (vin, parser_version),
+    ).fetchone()
+    return row["parsed_json"] if row else None
+
+
+def put_parsed_sticker(
+    conn: sqlite3.Connection, vin: str, parser_version: int, parsed_json: str, ts: datetime
+) -> None:
+    conn.execute(
+        """INSERT INTO parsed_stickers (vin, parser_version, parsed_json, parsed_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(vin) DO UPDATE SET parser_version=excluded.parser_version,
+             parsed_json=excluded.parsed_json, parsed_at=excluded.parsed_at""",
+        (vin, parser_version, parsed_json, _iso(ts)),
+    )
+    conn.commit()
 
 
 def replace_conflicts(

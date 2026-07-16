@@ -103,6 +103,10 @@ The design goal is that you *cannot* accidentally overspend. Still, know these:
   intent, which is exactly what the scheduler does.
 - Every call is recorded and hard-capped. If you hit a cap mid-sync, the sync
   **stops cleanly** rather than overspending — check the **Budget** page.
+- A sync walks at most **150 pages (3,000 listings)** per model as a runaway
+  backstop. If it ever stops early with more pages available, the finish message
+  says **"⚠ page ceiling hit — results incomplete"** — a silent cap can't
+  masquerade as full coverage.
 - Watch spend anytime: `uv run carfinder budget`.
 
 ### Data loss
@@ -161,10 +165,15 @@ uv run carfinder rescore
 ```
 
 This re-ranks **every car already in your database** against the edited profiles.
-It uses cached sticker/AI data, so it makes **~zero API calls** and needs no
+It uses cached sticker/AI data, so it makes **~zero Auto.dev calls** and needs no
 Auto.dev key — tune freely and re-run as often as you like. (A sync only re-scores
 *new/changed* cars, so `rescore` is what applies a preference change to the cars
 you already have.)
+
+Rescore also **backfills window stickers** for cars that don't have one yet —
+up to 50 free GM fetches per run (~3 s each, out of politeness to GM's endpoint),
+**best-looking active cars first**. So each rescore upgrades the most promising
+*needs review* cars toward a verified *ranked*/*excluded* verdict.
 
 > A malformed YAML is rejected with a clear error and nothing is changed, so a
 > typo can't corrupt your data — fix it and re-run.

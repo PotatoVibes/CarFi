@@ -49,6 +49,8 @@ def _summarize_sync(results: dict[str, PipelineStats]) -> str:
         parts.append(f"{fetched} sticker fetches")
     if sold:
         parts.append(f"{sold} presumed sold")
+    if any(s.sync.truncated for s in results.values()):
+        parts.append("⚠ page ceiling hit — results incomplete")
     return " · ".join(parts)
 
 

@@ -11,13 +11,24 @@ marked presumed_sold.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import httpx
+
 from .sources import ListingRow, ListingSource
+
+log = logging.getLogger("carfinder.sync")
+
+# Page-walk ceiling: a runaway-loop backstop, NOT a result limiter. At 20
+# rows/page this allows 3,000 listings — comfortably above the ~1,700 in-band
+# C8 market. (The old default of 50 silently capped results at exactly 1,000.)
+# BudgetGuard remains the real spend protection.
+MAX_PAGES_DEFAULT = 150
 
 
 def _iso(dt: datetime) -> str:
@@ -33,6 +44,10 @@ class SyncStats:
     updated_vins: int = 0
     price_changes: int = 0
     stopped_early: bool = False
+    # True when the walk ended with more pages still available (page ceiling
+    # hit, or a mid-walk HTTP failure) — results are incomplete, not the full
+    # market. Surfaced in the UI so a silent cap can't masquerade as coverage.
+    truncated: bool = False
     seen_vins: list[str] = field(default_factory=list)
     # VINs that are new or had a price change this run — the pipeline only needs
     # to (re)fetch stickers and (re)score these, not every seen VIN.
@@ -198,7 +213,7 @@ class SyncEngine:
         model_key: str,
         mode: str = "incremental",
         run_id: str | None = None,
-        max_pages: int = 50,
+        max_pages: int = MAX_PAGES_DEFAULT,
         sort: str = "createdAt.desc",
         progress: Callable[[str], None] | None = None,
     ) -> SyncStats:
@@ -212,13 +227,29 @@ class SyncEngine:
         stats = SyncStats(run_id=run_id, mode=mode)
 
         page = 1
-        while page <= max_pages:
+        while True:
+            if page > max_pages:
+                # Ceiling hit with pages still available — flag it loudly.
+                stats.truncated = True
+                log.warning(
+                    "%s sync hit the %d-page ceiling — results truncated", model_key, max_pages
+                )
+                break
             if progress is not None:
                 progress(
                     f"fetching page {page} ({stats.new_vins} new, "
                     f"{stats.price_changes} price changes so far)"
                 )
-            result = self._source.search_page(params, page=page, sort=sort, run_id=run_id)
+            try:
+                result = self._source.search_page(params, page=page, sort=sort, run_id=run_id)
+            except httpx.HTTPStatusError:
+                if page == 1:
+                    raise  # a dead first page is a real failure (bad key, etc.)
+                # Mid-walk failure (past retries): keep the pages already
+                # ingested rather than losing the whole run.
+                stats.truncated = True
+                log.warning("%s sync aborted at page %d — keeping partial results", model_key, page)
+                break
             stats.pages_fetched += 1
             if not result.rows:
                 break
