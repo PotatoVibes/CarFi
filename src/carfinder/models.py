@@ -1,0 +1,258 @@
+"""Requirement-profile schema, scoring input, and scoring output models.
+
+Everything here is pure data + validation. No I/O. The scorer (scorer.py)
+consumes a `Profile` and a `Vehicle` and returns a `ScoreResult`.
+
+Provenance discipline (the core rule of this tool):
+  * verified  — from the window sticker / OEM build data (ground truth)
+  * claimed   — from dealer listing text/fields (unconfirmed)
+  * unknown   — no evidence either way
+A claimed match can raise a soft score but can NEVER satisfy a hard requirement.
+"""
+
+from __future__ import annotations
+
+import re
+from enum import StrEnum
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class Provenance(StrEnum):
+    verified = "verified"
+    claimed = "claimed"
+    unknown = "unknown"
+
+
+# --- Matcher ---------------------------------------------------------------
+
+
+class Matcher(BaseModel):
+    """Matches a vehicle option via RPO code(s) AND/OR a sticker-text regex.
+
+    A match on either the RPO set or the text regex counts (OR semantics). RPO
+    codes are the precise signal; the text regex is the drift-proof safety net.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rpo: list[str] = Field(default_factory=list)
+    sticker_text: str | None = None
+
+    @field_validator("rpo", mode="before")
+    @classmethod
+    def _coerce_rpo(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return list(v)  # type: ignore[arg-type]
+
+    @field_validator("rpo")
+    @classmethod
+    def _normalize_rpo(cls, v: list[str]) -> list[str]:
+        return [c.strip().upper() for c in v if c.strip()]
+
+    @field_validator("sticker_text")
+    @classmethod
+    def _validate_regex(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        try:
+            re.compile(v, re.IGNORECASE)
+        except re.error as exc:  # malformed config → reject at load time
+            raise ValueError(f"invalid sticker_text regex {v!r}: {exc}") from exc
+        return v
+
+    @model_validator(mode="after")
+    def _require_something(self) -> Matcher:
+        if not self.rpo and not self.sticker_text:
+            raise ValueError("matcher must specify rpo and/or sticker_text")
+        return self
+
+    def compiled(self) -> re.Pattern[str] | None:
+        return re.compile(self.sticker_text, re.IGNORECASE) if self.sticker_text else None
+
+
+# --- Constraints -----------------------------------------------------------
+
+
+class HardConstraint(BaseModel):
+    """A verified-only pass/fail gate.
+
+    kind:
+      * require   — the option must be present (verified).
+      * forbid    — the option must be absent (e.g., exclude Z06/E-Ray).
+      * year_min  — model year must be >= min_year.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    kind: Literal["require", "forbid", "year_min"] = "require"
+    matcher: Matcher | None = None
+    min_year: int | None = None
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> HardConstraint:
+        if self.kind in ("require", "forbid") and self.matcher is None:
+            raise ValueError(f"hard constraint {self.key!r} ({self.kind}) needs a matcher")
+        if self.kind == "year_min" and self.min_year is None:
+            raise ValueError(f"hard constraint {self.key!r} (year_min) needs min_year")
+        return self
+
+
+class SoftConstraint(BaseModel):
+    """A weighted 0–100 dimension with a linear penalty curve.
+
+    kind:
+      * numeric — score by `attr` (miles/price) against ideal/hard bounds.
+      * color   — score by resolved color family (preferred/penalized/neutral).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    kind: Literal["numeric", "color"]
+    weight: float = Field(gt=0)
+
+    # numeric
+    attr: Literal["miles", "price"] | None = None
+    ideal: float | None = None
+    hard: float | None = None
+    direction: Literal["lower_better", "higher_better"] = "lower_better"
+    exclude_beyond_hard: bool = False
+
+    # color
+    preferred: list[str] = Field(default_factory=list)
+    penalized: list[str] = Field(default_factory=list)
+    neutral_score: float = 50.0
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> SoftConstraint:
+        if self.kind == "numeric":
+            if self.attr is None or self.ideal is None or self.hard is None:
+                raise ValueError(f"numeric soft constraint {self.key!r} needs attr, ideal, hard")
+            if self.ideal == self.hard:
+                raise ValueError(f"soft constraint {self.key!r}: ideal and hard must differ")
+        if self.kind == "color":
+            from .colors import ColorFamily
+
+            valid = {f.value for f in ColorFamily}
+            unknown = (set(self.preferred) | set(self.penalized)) - valid
+            if unknown:
+                raise ValueError(
+                    f"color soft constraint {self.key!r} has unknown families {sorted(unknown)}"
+                )
+        return self
+
+
+class Highlight(BaseModel):
+    """A bonus badge. Bonus 0–10; the scorer caps the total contribution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    bonus: float = Field(ge=0, le=10)
+    matcher: Matcher
+
+
+class Profile(BaseModel):
+    """A full requirement profile for one model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    model_key: str
+    hard: list[HardConstraint] = Field(default_factory=list)
+    soft: list[SoftConstraint] = Field(default_factory=list)
+    highlights: list[Highlight] = Field(default_factory=list)
+    # An unknown-provenance hard requirement routes to "needs review" rather
+    # than a silent rejection. Flip to False to treat unknown as failure.
+    review_on_unknown_hard: bool = True
+
+
+# --- Scoring input ---------------------------------------------------------
+
+
+class Vehicle(BaseModel):
+    """Normalized, provenance-tagged view of one car, ready for scoring.
+
+    Populated by later milestones (sticker parser, listing sync). Tests build
+    it directly.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vin: str | None = None
+    year: int | None = None
+    miles: int | None = None
+    price: float | None = None
+
+    # Verified evidence (window sticker / OEM build data).
+    verified_rpo: set[str] = Field(default_factory=set)
+    verified_text: str = ""
+    # True once an authoritative, complete sticker was parsed: then the absence
+    # of an option in the verified evidence is a definitive "no".
+    sticker_complete: bool = False
+
+    # Claimed evidence (dealer listing free-text / structured fields).
+    claimed_text: str = ""
+
+    # Paint / color.
+    paint_rpo: str | None = None
+    color_text: str | None = None
+
+    @field_validator("verified_rpo", mode="before")
+    @classmethod
+    def _upper_rpo(cls, v: object) -> object:
+        if isinstance(v, (set, list, tuple)):
+            return {str(c).strip().upper() for c in v}
+        return v
+
+    @field_validator("paint_rpo")
+    @classmethod
+    def _upper_paint(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else v
+
+
+# --- Scoring output --------------------------------------------------------
+
+Verdict = Literal["excluded", "needs_review", "ranked"]
+Group = Literal["hard", "soft", "highlight"]
+Status = Literal["pass", "fail", "needs_review", "scored", "badge"]
+
+
+class RequirementResult(BaseModel):
+    key: str
+    label: str
+    group: Group
+    status: Status
+    provenance: Provenance
+    detail: str = ""
+    matched: bool | None = None
+    dim_score: float | None = None  # 0–100, soft only
+    weight: float | None = None
+    bonus: float | None = None  # highlight contribution actually applied
+
+
+class ScoreResult(BaseModel):
+    vin: str | None
+    verdict: Verdict
+    soft_score: float  # 0–100
+    highlight_bonus: float  # 0–HIGHLIGHT_CAP
+    total: float  # soft_score + highlight_bonus
+    hard: list[RequirementResult] = Field(default_factory=list)
+    soft: list[RequirementResult] = Field(default_factory=list)
+    highlights: list[RequirementResult] = Field(default_factory=list)
+
+    @property
+    def failures(self) -> list[RequirementResult]:
+        return [r for r in self.hard if r.status == "fail"]
+
+    @property
+    def reviews(self) -> list[RequirementResult]:
+        return [r for r in self.hard if r.status == "needs_review"]
