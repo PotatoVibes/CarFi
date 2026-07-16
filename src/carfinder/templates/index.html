@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Models</h1>
+{% if latest_sync %}
+  <p class="muted">Last sync: {{ latest_sync.started_at }} ({{ latest_sync.mode }},
+    {{ latest_sync.new_vins }} new).</p>
+{% else %}
+  <p class="muted">No sync has run yet. Set your keys and hit “Sync now”.</p>
+{% endif %}
+<div class="grid">
+  {% for m in models %}
+  <a class="card" href="/m/{{ m.model_key }}">
+    <div style="font-weight:700; font-size:16px">{{ m.name }}</div>
+    <div style="margin-top:8px">
+      <span class="badge ranked">{{ m.counts.ranked }} ranked</span>
+      <span class="badge needs_review">{{ m.counts.needs_review }} review</span>
+      <span class="badge excluded">{{ m.counts.excluded }} excluded</span>
+    </div>
+  </a>
+  {% else %}
+  <p>No profiles found in the config directory.</p>
+  {% endfor %}
+</div>
+{% endblock %}

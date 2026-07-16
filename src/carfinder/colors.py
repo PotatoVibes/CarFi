@@ -94,6 +94,28 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
 ]
 
 
+# Approximate swatch colors for UI chips, keyed by family.
+FAMILY_HEX: dict[str, str] = {
+    "blue": "#2f5fb0",
+    "red": "#b02f2f",
+    "white": "#e8e8e8",
+    "black": "#1c1c1c",
+    "gray": "#6b7280",
+    "silver": "#c0c4c8",
+    "yellow": "#e0c030",
+    "orange": "#d67a2c",
+    "green": "#3a7d44",
+    "brown": "#6b4f32",
+    "other": "#9aa0a6",
+}
+
+
+def chip_hex(model_key: str, paint_rpo: str | None, color_text: str | None) -> str:
+    """Best-effort swatch hex for a vehicle: paint RPO first, then text."""
+    fam = family_from_rpo(model_key, paint_rpo) or family_from_text(color_text)
+    return FAMILY_HEX.get(fam.value if fam else "other", FAMILY_HEX["other"])
+
+
 def paint_codes(model_key: str) -> set[str]:
     """All known paint RPO codes for a model (for options-list intersection)."""
     return set(_PAINT_TABLES.get(model_key, {}))

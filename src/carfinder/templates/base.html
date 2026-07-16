@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Car Finder{% endblock %}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #0f1115; color: #e6e6e6; }
+    a { color: #6ea8ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { background: #171a21; padding: 12px 20px; border-bottom: 1px solid #262b36;
+      display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+    header .brand { font-weight: 700; font-size: 17px; color: #fff; }
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b36; }
+    th { color: #9aa0a6; font-weight: 600; font-size: 13px; }
+    tr:hover td { background: #161a22; }
+    .chip { display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+      border: 1px solid #00000055; vertical-align: middle; margin-right: 6px; }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
+      font-weight: 600; }
+    .verified { background: #16391f; color: #7ee29a; }
+    .claimed  { background: #3a3316; color: #e0cf7e; }
+    .unknown  { background: #2a2f3a; color: #9aa0a6; }
+    .ranked { background: #16391f; color: #7ee29a; }
+    .needs_review { background: #3a3316; color: #e0cf7e; }
+    .excluded { background: #3a1c1c; color: #e08a8a; }
+    .fail { color: #e08a8a; } .pass { color: #7ee29a; }
+    .new { background: #16305a; color: #9ec2ff; }
+    .score { font-weight: 700; font-size: 16px; }
+    .muted { color: #9aa0a6; }
+    .bar { height: 8px; background: #262b36; border-radius: 4px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; background: #6ea8ff; }
+    button { font: inherit; background: #2452a6; color: #fff; border: 0; padding: 7px 14px;
+      border-radius: 6px; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .card { background: #171a21; border: 1px solid #262b36; border-radius: 8px; padding: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">🏎️ Car Finder</span>
+    <a href="/">Home</a>
+    <a href="/budget">Budget</a>
+    <a href="/conflicts">Conflicts</a>
+    <form method="post" action="/sync" style="margin-left:auto">
+      <button type="submit">Sync now</button>
+    </form>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

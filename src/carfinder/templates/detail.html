@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set v = d.vehicle %}
+{% block title %}{{ v.vin }} — Car Finder{% endblock %}
+{% block content %}
+<p><a href="/m/{{ v.model_key }}">← back to matches</a></p>
+<h1>
+  <span class="chip" style="background: {{ chip_hex(v.model_key, v.get('paint_rpo'), v.color) }}"></span>
+  {{ v.year or "" }} {{ v.make or "" }} {{ v.model or "" }} {{ v.trim or "" }}
+</h1>
+<p class="muted">VIN {{ v.vin }} · {{ v.status }}</p>
+
+{% if d.match %}
+<p>
+  <span class="score">{{ "%.0f"|format(d.match.total) }}</span>/110 &nbsp;
+  <span class="badge {{ d.match.verdict }}">{{ d.match.verdict.replace("_"," ") }}</span>
+  <span class="muted">soft {{ "%.0f"|format(d.match.soft_score) }} + bonus
+    {{ "%.0f"|format(d.match.highlight_bonus) }}</span>
+</p>
+{% endif %}
+
+<p>
+  {% if v.miles is not none %}{{ "{:,}".format(v.miles) }} mi · {% endif %}
+  {% if v.price is not none %}${{ "{:,.0f}".format(v.price) }}{% endif %}
+  {% if sticker_pdf %}· <a href="/sticker/{{ v.vin }}">window sticker (PDF)</a>{% endif %}
+</p>
+
+<h2>Hard requirements</h2>
+<table><tbody>
+  {% for h in d.breakdown.hard %}
+  <tr>
+    <td class="{{ 'pass' if h.status == 'pass' else 'fail' if h.status == 'fail' else '' }}">
+      {{ "✓" if h.status == "pass" else "✗" if h.status == "fail" else "?" }} {{ h.label }}</td>
+    <td><span class="badge {{ h.provenance }}">{{ h.provenance }}</span></td>
+    <td class="muted">{{ h.status.replace("_"," ") }} — {{ h.detail }}</td>
+  </tr>
+  {% endfor %}
+</tbody></table>
+
+<h2>Soft scores</h2>
+<table><tbody>
+  {% for s in d.breakdown.soft %}
+  <tr>
+    <td style="width:160px">{{ s.label }}</td>
+    <td style="width:200px">
+      {% if s.dim_score is not none %}
+      <div class="bar"><span style="width: {{ s.dim_score }}%"></span></div>
+      {% else %}<span class="muted">unknown</span>{% endif %}
+    </td>
+    <td><span class="badge {{ s.provenance }}">{{ s.provenance }}</span></td>
+    <td class="muted">{{ s.detail }}</td>
+  </tr>
+  {% endfor %}
+</tbody></table>
+
+{% set badges = d.breakdown.highlights | selectattr("matched") | list %}
+{% if badges %}
+<h2>Highlights</h2>
+<p>{% for b in badges %}
+  <span class="badge claimed">{{ b.label }} +{{ "%.0f"|format(b.bonus) }}
+    ({{ b.provenance }})</span>
+{% endfor %}</p>
+{% endif %}
+
+{% if d.conflicts %}
+<h2>⚠ Conflicts</h2>
+<table><thead><tr><th>Field</th><th>Winner</th><th>Values</th></tr></thead><tbody>
+  {% for c in d.conflicts %}
+  <tr><td>{{ c.field }}</td><td>{{ c.winner }}</td>
+      <td class="muted">{% for src, val in c['values'] %}{{ src }}={{ val }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+  {% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if d.price_history | length > 1 %}
+<h2>Price history</h2>
+<p class="muted">{% for p in d.price_history %}${{ "{:,.0f}".format(p.price) }}
+  <span style="font-size:11px">({{ p.observed_at[:10] }})</span>{% if not loop.last %} → {% endif %}{% endfor %}</p>
+{% endif %}
+{% endblock %}

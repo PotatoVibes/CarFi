@@ -21,12 +21,14 @@ import httpx
 
 from . import colors, db
 from .ai import Attribute, HaikuExtractor
-from .budget import BudgetExceeded
+from .budget import BudgetExceeded, BudgetGuard
+from .config import Settings
 from .models import Profile, Provenance, Vehicle
+from .notify import Notifier
 from .query import build_listing_params
 from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
-from .sources import ListingSource
+from .sources import AutoDevSource, ListingSource
 from .sticker_parser import parse_sticker, vehicle_kwargs
 from .stickers import FOUND, StickerFetcher
 from .sync import SyncEngine, SyncStats
@@ -47,6 +49,7 @@ class PipelineStats:
     ai_calls: int = 0  # new (non-cached) AI extraction calls this run
     ai_cost_usd: float = 0.0
     ai_budget_exhausted: bool = False
+    notified: int = 0
 
 
 class Pipeline:
@@ -59,6 +62,8 @@ class Pipeline:
         now: Callable[[], datetime] | None = None,
         max_stickers_per_run: int = 50,
         extractor: HaikuExtractor | None = None,
+        notifier: Notifier | None = None,
+        notify_threshold: float = 85.0,
     ):
         self._conn = conn
         self._fetcher = fetcher
@@ -67,6 +72,8 @@ class Pipeline:
         self._now = now or (lambda: datetime.now(UTC))
         self._max_stickers = max_stickers_per_run
         self._extractor = extractor
+        self._notifier = notifier
+        self._notify_threshold = notify_threshold
 
     def run(
         self,
@@ -91,8 +98,13 @@ class Pipeline:
             )
             vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
             result = score_vehicle(profile, vehicle)
+            prior = self._conn.execute(
+                "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
+            ).fetchone()
             self._persist(vin, profile.model_key, result)
             self._log_conflicts(vin, profile.model_key, parsed, row)
+            if self._maybe_notify(vin, profile, result, prior):
+                stats.notified += 1
             stats.scored += 1
             stats.ranked += result.verdict == "ranked"
             stats.needs_review += result.verdict == "needs_review"
@@ -159,6 +171,25 @@ class Pipeline:
             stats.ai_calls += 1
         stats.ai_cost_usd += ext.cost_usd
         return ext.features
+
+    def _maybe_notify(self, vin, profile, result, prior) -> bool:
+        """Notify once when a car newly reaches ranked at/above the threshold.
+
+        'Newly' = it wasn't already ranked-above-threshold on the prior run, so
+        a stable qualifying car doesn't ping every sync."""
+        if self._notifier is None or not self._notifier.enabled:
+            return False
+        qualifies = result.verdict == "ranked" and result.total >= self._notify_threshold
+        if not qualifies:
+            return False
+        was = prior is not None and prior["verdict"] == "ranked" and (
+            prior["total"] >= self._notify_threshold
+        )
+        if was:
+            return False
+        title = f"Car Finder: {profile.name} scored {result.total:.0f}"
+        body = f"VIN {vin} — verdict {result.verdict}, total {result.total:.0f}/110."
+        return self._notifier.notify_match(vin, title, body)
 
     def _build_vehicle(
         self, vin: str, model_key: str, parsed, row, claimed_features: dict[str, str]
@@ -259,6 +290,33 @@ class Pipeline:
             ),
         )
         self._conn.commit()
+
+
+def build_pipeline(
+    conn, settings: Settings, current_year: int, guard: BudgetGuard | None = None
+) -> Pipeline:
+    """Wire a live Pipeline from settings (Auto.dev + GM stickers + optional
+    Haiku + optional webhook). Raises ValueError if the Auto.dev key is absent."""
+    if not settings.autodev_api_key:
+        raise ValueError("AUTODEV_API_KEY is required to sync")
+    guard = guard or BudgetGuard.from_settings(conn, settings)
+    source = AutoDevSource(settings.autodev_api_key, guard)
+    fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
+    extractor = (
+        HaikuExtractor(conn, guard, settings.anthropic_api_key)
+        if settings.anthropic_api_key
+        else None
+    )
+    notifier = Notifier(settings.notify_webhook_url) if settings.notify_webhook_url else None
+    return Pipeline(
+        conn,
+        source,
+        fetcher,
+        current_year,
+        extractor=extractor,
+        notifier=notifier,
+        notify_threshold=settings.notify_threshold,
+    )
 
 
 def _claimed_text(row) -> str:

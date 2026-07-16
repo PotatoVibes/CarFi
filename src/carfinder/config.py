@@ -40,6 +40,9 @@ class Settings:
     monthly_ai_budget_usd: float
     monthly_call_cap_gm: int
     stickers_dir: Path
+    config_dir: Path
+    notify_webhook_url: str | None
+    notify_threshold: float
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -53,4 +56,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         monthly_ai_budget_usd=float(os.environ.get("MONTHLY_AI_BUDGET_USD", "2")),
         monthly_call_cap_gm=int(os.environ.get("MONTHLY_CALL_CAP_GM", "500")),
         stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR", "stickers")),
+        config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR", "config")),
+        notify_webhook_url=os.environ.get("NOTIFY_WEBHOOK_URL") or None,
+        notify_threshold=float(os.environ.get("NOTIFY_THRESHOLD", "85")),
     )

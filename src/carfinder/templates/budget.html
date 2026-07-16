@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Budget — Car Finder{% endblock %}
+{% block content %}
+<h1>API budget (month to date)</h1>
+<table>
+  <thead><tr><th>Provider</th><th>Used</th><th>Cap</th><th></th><th>Remaining</th></tr></thead>
+  <tbody>
+  {% for u in usage %}
+    {% set pct = (u.fraction * 100) if u.cap > 0 else 0 %}
+    <tr>
+      <td>{{ u.provider }}</td>
+      <td>{% if u.kind == "cost" %}${{ "%.4f"|format(u.used) }}{% else %}{{ "%.0f"|format(u.used) }}{% endif %}</td>
+      <td>{% if u.kind == "cost" %}${{ "%.2f"|format(u.cap) }}{% else %}{{ "%.0f"|format(u.cap) }}{% endif %}</td>
+      <td style="width:220px"><div class="bar"><span style="width: {{ [pct, 100]|min }}%;
+        background: {{ '#e08a8a' if pct >= 90 else '#e0cf7e' if pct >= 75 else '#6ea8ff' }}"></span></div></td>
+      <td class="muted">{{ "%.1f"|format(pct) }}%</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted">Caps are enforced by BudgetGuard — no live call can exceed them.</p>
+{% endblock %}

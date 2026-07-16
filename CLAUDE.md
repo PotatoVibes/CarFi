@@ -11,3 +11,6 @@ VIN-verified requirements. Full design in PLAN.md — read it before any work.
 - Python 3.12 via uv. Conventional commits. Tag each milestone (m0, m1...).
 - Work one milestone at a time, in PLAN.md order. Ask before starting the next.
 - Window sticker PDFs and recorded API fixtures ARE committed (they're contract tests).
+
+# Guidelines
+- Any call to an LLM should be structured to maximize cache hit rates. The system prompt should not be artificially inflated to reach the caching minimum for a given model, but the overall query should be assembled in such a way that if it becomes long enough to get cached, it will do so in the best possible way.

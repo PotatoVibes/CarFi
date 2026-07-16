@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} — Car Finder{% endblock %}
+{% block content %}
+<h1>{{ name }}</h1>
+<p>
+  <span class="badge ranked">{{ counts.ranked }} ranked</span>
+  <span class="badge needs_review">{{ counts.needs_review }} needs review</span>
+  {% if show_excluded %}
+    <a href="/m/{{ model_key }}">hide excluded</a>
+  {% else %}
+    <a href="/m/{{ model_key }}?show_excluded=true">show {{ counts.excluded }} excluded</a>
+  {% endif %}
+</p>
+<table>
+  <thead>
+    <tr><th>Score</th><th>Verdict</th><th>Year</th><th>Color</th><th>Miles</th>
+        <th>Price</th><th>Bonus</th><th>Sticker</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="score">{{ "%.0f"|format(r.total) }}</td>
+      <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
+          {% if r.is_new %}<span class="badge new">new</span>{% endif %}</td>
+      <td>{{ r.year or "?" }}</td>
+      <td><span class="chip" style="background: {{ chip_hex(model_key, None, r.color) }}"></span>
+          {{ r.color or "—" }}</td>
+      <td>{{ "{:,}".format(r.miles) if r.miles is not none else "?" }}</td>
+      <td>{{ "${:,.0f}".format(r.price) if r.price is not none else "?" }}</td>
+      <td class="muted">{% if r.highlight_bonus %}+{{ "%.0f"|format(r.highlight_bonus) }}{% endif %}</td>
+      <td>{% if r.sticker_status == "found" %}<span class="badge verified">✓</span>
+          {% else %}<span class="muted">{{ r.sticker_status or "—" }}</span>{% endif %}</td>
+      <td><a href="/v/{{ r.vin }}">detail →</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="muted">No matches yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

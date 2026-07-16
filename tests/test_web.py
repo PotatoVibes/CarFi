@@ -1,0 +1,92 @@
+"""FastAPI UI tests via TestClient — offline, seeded DB."""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from carfinder.web import create_app
+from conftest import BW_VIN, C8_VIN, REVIEW_VIN
+
+
+def _client(settings):
+    return TestClient(create_app(settings))
+
+
+def test_health(seeded_settings):
+    assert _client(seeded_settings).get("/health").json() == {"status": "ok"}
+
+
+def test_index_lists_models_with_counts(seeded_settings):
+    r = _client(seeded_settings).get("/")
+    assert r.status_code == 200
+    assert "C8 Corvette Stingray" in r.text
+    assert "Cadillac CT4-V Blackwing" in r.text
+
+
+def test_matches_hides_excluded_by_default(seeded_settings):
+    c = _client(seeded_settings)
+    r = c.get("/m/c8_stingray")
+    assert r.status_code == 200
+    assert REVIEW_VIN in r.text  # needs_review shown
+    assert C8_VIN not in r.text  # excluded hidden
+    r2 = c.get("/m/c8_stingray?show_excluded=true")
+    assert C8_VIN in r2.text  # now shown
+
+
+def test_matches_ranked_appears(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing")
+    assert BW_VIN in r.text
+    assert "ranked" in r.text
+
+
+def test_new_since_last_visit_cookie(seeded_settings):
+    c = _client(seeded_settings)
+    # First visit: no cookie -> REVIEW_VIN (first_seen 2026-07-20) not flagged new
+    # (no baseline). Second visit sets a cookie in the past-relative sense.
+    r1 = c.get("/m/c8_stingray")
+    assert "seen_c8_stingray" in r1.cookies
+    # A visit with an old cookie flags the newer car as "new".
+    c.cookies.set("seen_c8_stingray", "2026-07-16T00:00:00Z")
+    r2 = c.get("/m/c8_stingray")
+    assert ">new<" in r2.text or "badge new" in r2.text
+
+
+def test_detail_shows_breakdown_and_sticker_link(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}")
+    assert r.status_code == 200
+    assert "Z51 Performance Package" in r.text
+    assert "verified" in r.text
+    assert f"/sticker/{BW_VIN}" in r.text  # committed PDF exists on disk
+
+
+def test_detail_unknown_vin_404(seeded_settings):
+    assert _client(seeded_settings).get("/v/NOPE").status_code == 404
+
+
+def test_sticker_pdf_served_from_disk(seeded_settings):
+    r = _client(seeded_settings).get(f"/sticker/{BW_VIN}")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:4] == b"%PDF"
+
+
+def test_sticker_missing_404(seeded_settings):
+    assert _client(seeded_settings).get("/sticker/NOSUCHVIN").status_code == 404
+
+
+def test_budget_page(seeded_settings):
+    r = _client(seeded_settings).get("/budget")
+    assert r.status_code == 200
+    assert "autodev" in r.text and "anthropic" in r.text
+
+
+def test_conflicts_page(seeded_settings):
+    r = _client(seeded_settings).get("/conflicts")
+    assert r.status_code == 200
+    assert "year" in r.text  # the seeded conflict field
+
+
+def test_sync_now_without_key_redirects(seeded_settings):
+    r = _client(seeded_settings).post("/sync", follow_redirects=False)
+    assert r.status_code == 303
+    assert "no_key" in r.headers["location"]

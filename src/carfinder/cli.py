@@ -45,6 +45,53 @@ def fetch_stickers(vins: list[str]) -> None:
 
 
 @app.command()
+def sync(full: bool = False) -> None:
+    """Run a sync over every configured profile (headless; no server needed)."""
+    from datetime import UTC, datetime
+
+    from .runner import run_sync
+
+    settings = load_settings()
+    conn = bootstrap(settings.db_path)
+    try:
+        results = run_sync(
+            conn,
+            settings,
+            datetime.now(UTC).year,
+            mode="full" if full else "incremental",
+            config_dir=settings.config_dir,
+        )
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    for model_key, s in results.items():
+        typer.echo(
+            f"  {model_key}: {s.scored} scored ({s.ranked} ranked, {s.needs_review} review, "
+            f"{s.excluded} excluded), {s.sync.new_vins} new, {s.stickers_fetched} sticker fetches"
+        )
+
+
+@app.command()
+def serve(host: str = "127.0.0.1", port: int = 8000, no_scheduler: bool = False) -> None:
+    """Start the web UI (and, unless --no-scheduler, the sync scheduler)."""
+    import uvicorn
+
+    from .scheduler import build_scheduler
+    from .web import create_app
+
+    settings = load_settings()
+    application = create_app(settings)
+    if not no_scheduler and settings.autodev_api_key:
+        build_scheduler(settings).start()
+        typer.echo("scheduler started (Mon/Wed/Fri incremental, Sun full pass)")
+    elif not no_scheduler:
+        typer.echo("scheduler disabled (no AUTODEV_API_KEY)")
+    uvicorn.run(application, host=host, port=port)
+
+
+@app.command()
 def budget() -> None:
     """Print month-to-date API usage per provider."""
     settings = load_settings()
