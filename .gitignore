@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs / tooling
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets — NEVER commit
+.env
+
+# Runtime state (DB lives under ./data, mounted as a volume)
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# OS
+.DS_Store
+Thumbs.db

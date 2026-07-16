@@ -1,0 +1,50 @@
+[project]
+name = "carfinder"
+version = "0.1.0"
+description = "Personal tool to find a VIN-verified C8 Corvette or CT4-V Blackwing"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",
+    "pdfplumber>=0.11",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "apscheduler>=3.10",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+]
+
+[project.scripts]
+carfinder = "carfinder.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "respx>=0.21",
+    "ruff>=0.5",
+    "pre-commit>=3.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/carfinder"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Default profile is fully offline. Live tests are opt-in only.
+addopts = "-m 'not live'"
+markers = [
+    "live: tests that make real network calls (opt-in, counted against budget)",
+]
