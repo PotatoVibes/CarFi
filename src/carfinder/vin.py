@@ -16,8 +16,12 @@ C8 Corvette (1G1Y…):
 CT4 (1G6D…):
   pos 8 (engine): P = LF4 3.6TT — Blackwing-only  (10/10 stickers)
                   L = L3B 2.7T — never a Blackwing (6/6 stickers)
-  Transmission is NOT VIN-encoded (corpus has manual and automatic
-  Blackwings sharing a VDS) — manual still requires the sticker (MG9).
+  pos 5 (series, Blackwing only): 6 = 6MT manual, 7 = 10-speed automatic —
+  GM certifies the two transmissions as separate configs. 6/6 consistent
+  across the corpus (D65 manual 2022/2024/2025; D75 auto 2022/2024), with
+  the 2023-only unified "DL5" series confirmed MIXED via per-VIN build
+  sheets — DL5 deliberately decodes to nothing and the sticker/build sheet
+  decides.
 
 Pos 10 model-year codes follow the standard alphabet; the subset below is
 title-verified in the corpus (N/P/R/S/T) plus M from a user-supplied 2021 car.
@@ -57,6 +61,12 @@ def decode(vin: str | None) -> dict[str, str]:
     elif v.startswith("1G6D"):  # CT4 family
         if v[7] == "P":
             facts["model"] = "BLACKWING"
+            # Blackwing series char: 6 = manual, 7 = automatic. 2023's
+            # unified 'L' series covered both -> no fact, evidence decides.
+            if v[4] == "6":
+                facts["trans"] = "MANUAL"
+            elif v[4] == "7":
+                facts["trans"] = "AUTO"
         elif v[7] == "L":
             facts["model"] = "NON_BLACKWING"
     return facts

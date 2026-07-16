@@ -35,8 +35,14 @@ def test_c8_unknown_series_decodes_to_nothing_definitive():
 
 
 def test_ct4_blackwing_vs_non_blackwing():
-    assert decode("1G6D65RP8N0460286") == {"model": "BLACKWING"}  # manual BW fixture
-    assert decode("1G6DL5RPXP0410176") == {"model": "BLACKWING"}  # automatic BW
+    # D65 = manual Blackwing (6/6 corpus split; GM certifies 6MT and 10AT
+    # as separate series configs).
+    assert decode("1G6D65RP8N0460286") == {"model": "BLACKWING", "trans": "MANUAL"}
+    assert decode("1G6D65RP2R0460256") == {"model": "BLACKWING", "trans": "MANUAL"}
+    # D75 = automatic Blackwing.
+    assert decode("1G6D75RP6N0410466") == {"model": "BLACKWING", "trans": "AUTO"}
+    # 2023's unified DL5 series covered both transmissions -> model only.
+    assert decode("1G6DL5RPXP0410176") == {"model": "BLACKWING"}
     assert decode("1G6DH5RL5P0123651") == {"model": "NON_BLACKWING"}  # 2.7T CT4-V
 
 

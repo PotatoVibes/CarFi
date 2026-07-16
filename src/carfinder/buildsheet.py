@@ -97,8 +97,10 @@ def parse_response(raw: dict, vin: str) -> BuildSheet | None:
 
     vehicle_line = info.get("vehicleInfo") or ""
     ym = _LEAD_YEAR.match(vehicle_line)
+    # optionalInfo carries the trim summary ("V Blackwing; 6 Cyl 3.6 L…") —
+    # on thin payloads (no full build sheet) it may be the only model signal.
     text = "\n".join(
-        [vehicle_line, *(v for v in major.values() if v), *lines],
+        [vehicle_line, info.get("optionalInfo") or "", *(v for v in major.values() if v), *lines],
     ).upper()
     return BuildSheet(
         vin=vin,

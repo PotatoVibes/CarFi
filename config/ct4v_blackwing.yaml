@@ -36,8 +36,12 @@ hard:
     label: 6-speed manual
     kind: require
     matcher:
-      # VERIFIED against 1G6D65RP8N0460286 (manual car): MG9 present, my
-      # original MX0 guess absent. Text regex remains the primary net.
+      # VIN pos 5 on Blackwings: 6 = manual, 7 = automatic (6/6 corpus
+      # cars; 2023's unified DL5 series decodes to nothing and falls
+      # through). MG9 VERIFIED against 1G6D65RP8N0460286 (manual car); the
+      # text regex also matches build-sheet transmission lines.
+      vin_attr: trans
+      vin_any: [MANUAL]
       rpo: MG9
       sticker_text: "6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION"
 
