@@ -70,6 +70,8 @@ def build_listing_params(profile: Profile, current_year: int) -> dict[str, str]:
         "vehicle.make": q.make,
         "vehicle.model": q.model,
     }
+    if q.trim:
+        params["vehicle.trim"] = q.trim
     if year_lo is not None and year_hi is not None:
         params["vehicle.year"] = f"{year_lo}-{year_hi}"
     elif year_lo is not None:

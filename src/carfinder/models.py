@@ -185,7 +185,8 @@ class ListingQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     make: str
-    model: str
+    model: str  # Auto.dev accepts comma-separated values, e.g. "CT4,CT4-V"
+    trim: str | None = None  # Auto.dev's normalized trim, e.g. "V Blackwing"
     year_min: int | None = None  # else derived from the year_min hard constraint
     year_max: int | None = None  # else current year + 1
     price_max: float | None = None  # else derived from the price soft hard bound

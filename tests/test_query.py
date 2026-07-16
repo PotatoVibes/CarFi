@@ -36,9 +36,19 @@ def test_blackwing_prefilter_params_golden():
     bw = load_profile(CONFIG / "ct4v_blackwing.yaml")
     params = build_listing_params(bw, current_year=2026)
     assert params["vehicle.make"] == "Cadillac"
-    assert params["vehicle.model"] == "CT4-V"
+    # Both Auto.dev model buckets (most Blackwings are filed under "CT4"),
+    # narrowed by their normalized trim value.
+    assert params["vehicle.model"] == "CT4,CT4-V"
+    assert params["vehicle.trim"] == "V Blackwing"
     assert params["vehicle.year"] == f"{_year_min(bw)}-2027"
-    assert params["retailListing.price"] == f"1-{round(_price_hard(bw) * 1.08)}"
+    margin = bw.query.price_margin
+    assert params["retailListing.price"] == f"1-{round(_price_hard(bw) * (1 + margin))}"
+
+
+def test_trim_omitted_when_not_configured():
+    c8 = load_profile(CONFIG / "c8_stingray.yaml")
+    params = build_listing_params(c8, current_year=2026)
+    assert "vehicle.trim" not in params
 
 
 def test_explicit_overrides_win():

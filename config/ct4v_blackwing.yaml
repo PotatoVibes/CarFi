@@ -2,12 +2,17 @@ name: Cadillac CT4-V Blackwing
 model_key: ct4v_blackwing
 
 # Server-side prefilter (Auto.dev). Wider than the hard bounds by design.
-# NOTE: vehicle.model value ("CT4-V" vs "CT4") is confirmed in the fixture
-# capture; trim-level filtering (Blackwing) is enforced by the scorer anyway.
+# NOTE (2026-07-16 count probes): Auto.dev files most of these cars under
+# model "CT4" with trim "V Blackwing" — the "CT4-V" bucket holds only ~14
+# cars nationally (mostly non-Blackwings). Query BOTH buckets (comma list)
+# with the trim filter: ~160 real Blackwings vs 15 before. price_margin is
+# wide because Blackwings often list above the hard bound and drop into
+# range later — the tracker watches for exactly that.
 query:
   make: Cadillac
-  model: CT4-V
-  price_margin: 0.08
+  model: "CT4,CT4-V"
+  trim: V Blackwing
+  price_margin: 0.40
 
 # --- Hard requirements (verified-only pass/fail) --------------------------
 hard:
@@ -71,6 +76,10 @@ soft:
     hard: 65000        # "for sure less than" -> hard bound
     direction: lower_better
     weight: 0.25
+    # With the wide prefilter above, over-budget cars are now ingested for
+    # price-drop tracking — this keeps them OUT of the ranked list until
+    # their asking price actually falls under the hard bound.
+    exclude_beyond_hard: true
 
   - key: color
     label: Color
