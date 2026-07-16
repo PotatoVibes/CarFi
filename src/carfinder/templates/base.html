@@ -43,8 +43,8 @@
     .card { background: #171a21; border: 1px solid #262b36; border-radius: 8px; padding: 14px; }
     .flash { background: #16305a; color: #9ec2ff; border: 1px solid #2452a6; border-radius: 8px;
       padding: 10px 14px; }
-    .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px;
-      border-radius: 14px; font-size: 12.5px; font-weight: 600; max-width: 480px;
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
+      border-radius: 14px; font-size: 13px; font-weight: 600; min-width: 0;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pill.running { background: #16305a; color: #9ec2ff; }
     .pill.done { background: #16391f; color: #7ee29a; }
@@ -62,10 +62,15 @@
     <a href="/">Home</a>
     <a href="/budget">Budget</a>
     <a href="/conflicts">Conflicts</a>
-    <span id="job-pill" class="pill" hidden></span>
-    <form method="post" action="/sync" data-job style="margin-left:auto">
-      <button type="submit">Sync now</button>
-    </form>
+    <!-- flex:1 + min-width:0 lets the pill use all remaining header width
+         (ellipsizing only when truly out of room) instead of hugging the button. -->
+    <div style="margin-left:auto; flex:1; min-width:0; display:flex; align-items:center;
+                justify-content:flex-end; gap:14px">
+      <span id="job-pill" class="pill" hidden></span>
+      <form method="post" action="/sync" data-job style="flex:none">
+        <button type="submit">Sync now</button>
+      </form>
+    </div>
   </header>
   <main>{% block content %}{% endblock %}</main>
   <script>
