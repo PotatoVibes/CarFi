@@ -3,20 +3,27 @@
 {% block content %}
 <h1>Cross-source conflicts</h1>
 <p class="muted">Disagreements between the window sticker and the listing, surfaced
-  rather than silently resolved. Winner = highest-precedence source.</p>
+  rather than silently resolved. Winner = highest-precedence source.
+  {% if show_excluded %}
+    <a href="/conflicts">hide excluded cars</a>
+  {% else %}
+    Conflicts on excluded cars are hidden (they already hard-failed).
+    <a href="/conflicts?show_excluded=true">show them anyway</a>
+  {% endif %}</p>
 <table>
-  <thead><tr><th>Vehicle</th><th>Field</th><th>Winner</th><th>Values</th><th>Detected</th></tr></thead>
+  <thead><tr><th>Vehicle</th><th>Verdict</th><th>Field</th><th>Winner</th><th>Values</th><th>Detected</th></tr></thead>
   <tbody>
   {% for c in conflicts %}
     <tr>
       <td><a href="/v/{{ c.vin }}">{{ c.year or "" }} {{ c.make or "" }} {{ c.model or c.vin }}</a></td>
+      <td>{% if c.verdict %}<span class="badge {{ c.verdict }}">{{ c.verdict.replace("_"," ") }}</span>{% endif %}</td>
       <td>{{ c.field }}</td>
       <td><span class="badge verified">{{ c.winner }}</span></td>
       <td class="muted">{% for src, val in c['values'] %}{{ src }}={{ val }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
       <td class="muted">{{ c.detected_at[:10] }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="muted">No conflicts recorded.</td></tr>
+    <tr><td colspan="6" class="muted">No conflicts to review.</td></tr>
   {% endfor %}
   </tbody>
 </table>

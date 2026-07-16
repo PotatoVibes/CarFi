@@ -29,14 +29,20 @@ class Provenance(StrEnum):
 
 
 class Matcher(BaseModel):
-    """Matches a vehicle option via RPO code(s) AND/OR a sticker-text regex.
+    """Matches a vehicle option via a VIN-decoded fact, RPO code(s), and/or a
+    sticker-text regex.
 
-    A match on either the RPO set or the text regex counts (OR semantics). RPO
-    codes are the precise signal; the text regex is the drift-proof safety net.
+    VIN facts are checked first (definitive physical identity — verified both
+    ways: a fact outside vin_any is a verified "no"). Then RPO / text, where a
+    match on either counts (OR semantics). RPO codes are the precise signal;
+    the text regex is the drift-proof safety net.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    # VIN fact check: vehicle.vin_facts[vin_attr] must be one of vin_any.
+    vin_attr: str | None = None  # "model" | "trim" | "body" (see vin.py)
+    vin_any: list[str] = Field(default_factory=list)
     rpo: list[str] = Field(default_factory=list)
     sticker_text: str | None = None
 
@@ -65,10 +71,17 @@ class Matcher(BaseModel):
             raise ValueError(f"invalid sticker_text regex {v!r}: {exc}") from exc
         return v
 
+    @field_validator("vin_any")
+    @classmethod
+    def _normalize_vin_any(cls, v: list[str]) -> list[str]:
+        return [c.strip().upper() for c in v if c.strip()]
+
     @model_validator(mode="after")
     def _require_something(self) -> Matcher:
-        if not self.rpo and not self.sticker_text:
-            raise ValueError("matcher must specify rpo and/or sticker_text")
+        if not self.rpo and not self.sticker_text and not self.vin_attr:
+            raise ValueError("matcher must specify vin_attr, rpo, and/or sticker_text")
+        if (self.vin_attr is None) != (not self.vin_any):
+            raise ValueError("vin_attr and vin_any must be provided together")
         return self
 
     def compiled(self) -> re.Pattern[str] | None:
@@ -215,6 +228,8 @@ class Vehicle(BaseModel):
     # Verified evidence (window sticker / OEM build data).
     verified_rpo: set[str] = Field(default_factory=set)
     verified_text: str = ""
+    # VIN-decoded facts (vin.decode): definitive identity, verified provenance.
+    vin_facts: dict[str, str] = Field(default_factory=dict)
     # True once an authoritative, complete sticker was parsed: then the absence
     # of an option in the verified evidence is a definitive "no".
     sticker_complete: bool = False

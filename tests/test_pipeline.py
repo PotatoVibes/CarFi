@@ -424,8 +424,71 @@ def test_rescore_processes_best_active_cars_first():
     assert seen == ["VINHIGH00000000B2", "VINLOW000000000A1", "VINSOLD00000000C3"]
 
 
+def test_vin_excluded_car_skips_sticker_fetch_entirely():
+    """A 1LT coupe is verified-excluded by VIN alone — zero sticker spend."""
+    vin = "1G1YA2D4XP5108883"  # 1LT coupe (real listing shape)
+    rows = [
+        ListingRow(
+            vin=vin,
+            source="autodev",
+            price=59998,
+            miles=5030,
+            year=2023,
+            make="Chevrolet",
+            model="Corvette",
+            trim="Stingray",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    stats = pipe.run(c8, run_id="r1")
+    assert stats.excluded == 1
+    assert stats.stickers_fetched == 0  # fast path: no GM call for a VIN-failed car
+    m = _match(conn, vin)
+    assert m["verdict"] == "excluded"
+    bd = json.loads(m["breakdown_json"])
+    trim = next(h for h in bd["hard"] if h["key"] == "trim_2lt_3lt")
+    conv = next(h for h in bd["hard"] if h["key"] == "convertible")
+    assert trim["status"] == "fail" and trim["provenance"] == "verified"
+    assert conv["status"] == "fail" and conv["provenance"] == "verified"
+    stingray = next(h for h in bd["hard"] if h["key"] == "model_stingray")
+    assert stingray["status"] == "pass" and stingray["provenance"] == "verified"
+
+
+def test_vin_passing_car_still_fetches_sticker():
+    """A 3LT convertible passes the VIN gate — sticker still needed for Z51."""
+    vin = "1G1YC3D40P5999999"  # 3LT convertible pattern, no cached sticker
+    rows = [
+        ListingRow(
+            vin=vin,
+            source="autodev",
+            price=64000,
+            miles=15000,
+            year=2023,
+            make="Chevrolet",
+            model="Corvette",
+            trim="Stingray 3LT",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
+    stats = pipe.run(c8, run_id="r1")
+    assert stats.stickers_fetched == 1  # GM miss attempted (mocked)
+    m = _match(conn, vin)
+    bd = json.loads(m["breakdown_json"])
+    # VIN verified the identity facts even with no sticker on file...
+    trim = next(h for h in bd["hard"] if h["key"] == "trim_2lt_3lt")
+    assert trim["status"] == "pass" and trim["provenance"] == "verified"
+    # ...but Z51 isn't VIN-encoded, so the car correctly stays needs_review.
+    z51 = next(h for h in bd["hard"] if h["key"] == "z51")
+    assert z51["status"] == "needs_review"
+    assert m["verdict"] == "needs_review"
+
+
 def test_sticker_cap_scores_on_listing_only():
-    vin = "1G1YAAAAAA5111111"  # not cached -> would hit network
+    # 3LT convertible pattern so the VIN gate passes (a VIN-failed car would
+    # be fast-path excluded before the cap is ever consulted).
+    vin = "1G1YC3D40P5111111"  # not cached -> would hit network
     rows = [
         ListingRow(
             vin=vin,

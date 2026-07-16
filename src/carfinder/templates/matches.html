@@ -11,14 +11,44 @@
     <a href="/m/{{ model_key }}?show_excluded=true">show {{ counts.excluded }} excluded</a>
   {% endif %}
 </p>
-<table>
+
+<p style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+  <input id="q" type="search" placeholder="filter — color, year, VIN…"
+         style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                background:#171a21; color:inherit; min-width:220px">
+  <select id="verdict-filter" style="font:inherit; padding:6px 8px; border-radius:6px;
+          border:1px solid #262b36; background:#171a21; color:inherit">
+    <option value="">all verdicts</option>
+    <option value="ranked">ranked</option>
+    <option value="needs_review">needs review</option>
+    {% if show_excluded %}<option value="excluded">excluded</option>{% endif %}
+  </select>
+  <label class="muted" style="user-select:none">
+    <input id="hide-sold" type="checkbox"> hide sold
+  </label>
+  <span id="row-count" class="muted"></span>
+</p>
+
+<table id="matches">
   <thead>
-    <tr><th>Score</th><th>Verdict</th><th>Year</th><th>Color</th><th>Miles</th>
-        <th>Price</th><th>Bonus</th><th>Sticker</th><th></th></tr>
+    <tr>
+      <th data-key="total" data-num>Score</th>
+      <th data-key="verdict">Verdict</th>
+      <th data-key="year" data-num>Year</th>
+      <th data-key="color">Color</th>
+      <th data-key="miles" data-num>Miles</th>
+      <th data-key="price" data-num>Price</th>
+      <th data-key="bonus" data-num>Bonus</th>
+      <th data-key="sticker">Sticker</th>
+      <th></th>
+    </tr>
   </thead>
   <tbody>
   {% for r in rows %}
-    <tr>
+    <tr data-total="{{ r.total }}" data-verdict="{{ r.verdict }}" data-year="{{ r.year or 0 }}"
+        data-color="{{ (r.color or '')|lower }}" data-miles="{{ r.miles if r.miles is not none else -1 }}"
+        data-price="{{ r.price if r.price is not none else -1 }}" data-bonus="{{ r.highlight_bonus }}"
+        data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}">
       <td class="score">{{ "%.0f"|format(r.total) }}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
@@ -38,4 +68,63 @@
   {% endfor %}
   </tbody>
 </table>
+
+<style>
+  #matches th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  #matches th[data-key]:hover { color: #e6e6e6; }
+  #matches th .dir { color: #6ea8ff; }
+</style>
+<script>
+  (function () {
+    const tbody = document.querySelector("#matches tbody");
+    const rows = Array.from(tbody.querySelectorAll("tr[data-vin]"));
+    if (!rows.length) return;
+    const q = document.getElementById("q");
+    const verdictSel = document.getElementById("verdict-filter");
+    const hideSold = document.getElementById("hide-sold");
+    const count = document.getElementById("row-count");
+
+    function applyFilter() {
+      const needle = q.value.trim().toLowerCase();
+      const verdict = verdictSel.value;
+      let shown = 0;
+      rows.forEach(function (tr) {
+        const hay = (tr.textContent + " " + tr.dataset.vin).toLowerCase();
+        let ok = !needle || hay.includes(needle);
+        if (ok && verdict) ok = tr.dataset.verdict === verdict;
+        if (ok && hideSold.checked) ok = tr.dataset.status !== "presumed_sold";
+        tr.hidden = !ok;
+        if (ok) shown++;
+      });
+      count.textContent = shown === rows.length
+        ? rows.length + " cars" : shown + " of " + rows.length + " cars";
+    }
+    q.addEventListener("input", applyFilter);
+    verdictSel.addEventListener("change", applyFilter);
+    hideSold.addEventListener("change", applyFilter);
+    applyFilter();
+
+    let sortKey = null, asc = false;
+    document.querySelectorAll("#matches th[data-key]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        const key = th.dataset.key;
+        asc = sortKey === key ? !asc : false;  // first click: descending
+        sortKey = key;
+        const num = th.hasAttribute("data-num");
+        rows.sort(function (a, b) {
+          const av = num ? parseFloat(a.dataset[key]) : a.dataset[key];
+          const bv = num ? parseFloat(b.dataset[key]) : b.dataset[key];
+          const cmp = num ? av - bv : String(av).localeCompare(String(bv));
+          return asc ? cmp : -cmp;
+        });
+        rows.forEach(function (tr) { tbody.appendChild(tr); });
+        document.querySelectorAll("#matches th .dir").forEach(function (s) { s.remove(); });
+        const dir = document.createElement("span");
+        dir.className = "dir";
+        dir.textContent = asc ? " ↑" : " ↓";
+        th.appendChild(dir);
+      });
+    });
+  })();
+</script>
 {% endblock %}

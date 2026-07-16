@@ -21,6 +21,7 @@ from pathlib import Path
 import httpx
 
 from . import colors, db
+from . import vin as vin_decode
 from .ai import Attribute, HaikuExtractor
 from .budget import BudgetExceeded, BudgetGuard
 from .config import Settings
@@ -155,16 +156,34 @@ class Pipeline:
         return stats
 
     def _process_vin(self, vin, profile, attributes, run_id, stats: PipelineStats) -> None:
-        parsed, sticker_path = self._maybe_sticker(vin, run_id, stats)
         row = self._conn.execute(
             "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
             (vin,),
         ).fetchone()
+
+        # Fast path: if the VIN alone verified-fails a hard requirement (wrong
+        # trim/body/model), the car is excluded no matter what the sticker
+        # says — skip the sticker fetch and AI spend entirely. Only taken when
+        # the sticker isn't already cached (a cached one is free and gives the
+        # richer breakdown).
+        if not self._fetcher.is_cached(vin):
+            pre = self._build_vehicle(vin, profile.model_key, None, row, {})
+            pre_result = score_vehicle(profile, pre)
+            if any(
+                r.status == "fail" and r.provenance == Provenance.verified for r in pre_result.hard
+            ):
+                self._finish_vin(vin, profile, pre_result, None, row, stats)
+                return
+
+        parsed, sticker_path = self._maybe_sticker(vin, run_id, stats)
         claimed_features = self._ai_features(
             vin, parsed, sticker_path, row, attributes, run_id, stats
         )
         vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
         result = score_vehicle(profile, vehicle)
+        self._finish_vin(vin, profile, result, parsed, row, stats)
+
+    def _finish_vin(self, vin, profile, result, parsed, row, stats: PipelineStats) -> None:
         prior = self._conn.execute(
             "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
         ).fetchone()
@@ -265,29 +284,32 @@ class Pipeline:
     def _build_vehicle(
         self, vin: str, model_key: str, parsed, row, claimed_features: dict[str, str]
     ) -> Vehicle:
-        """Merge verified sticker data with claimed listing/AI data into a Vehicle."""
+        """Merge verified sticker + VIN data with claimed listing/AI data."""
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
         claimed_text = _claimed_text(row)
+        facts = vin_decode.decode(vin)
 
         if parsed is not None:
             kw = vehicle_kwargs(parsed, model_key)
             kw["miles"] = miles
             kw["price"] = price
             if kw.get("year") is None:
-                kw["year"] = listing_year
+                kw["year"] = listing_year or vin_decode.model_year(vin)
             # Keep the listing text as a claimed fallback alongside verified data.
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
+            kw["vin_facts"] = facts
             return Vehicle(**kw)
 
-        # No sticker: listing data only (claimed provenance).
+        # No sticker: VIN facts (verified) + listing data (claimed).
         return Vehicle(
             vin=vin,
-            year=listing_year,
+            year=listing_year or vin_decode.model_year(vin),
             miles=miles,
             price=price,
+            vin_facts=facts,
             claimed_text=claimed_text,
             color_text=(row["color"] if row else None),
             claimed_features=claimed_features,

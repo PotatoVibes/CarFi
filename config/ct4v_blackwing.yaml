@@ -15,6 +15,11 @@ hard:
     label: CT4-V Blackwing
     kind: require
     matcher:
+      # VIN pos 8 engine: P = 3.6TT LF4 (Blackwing-only), L = 2.7T (never a
+      # Blackwing) — corpus-verified in src/carfinder/vin.py. Transmission is
+      # NOT in the VIN; manual still requires the sticker (MG9).
+      vin_attr: model
+      vin_any: [BLACKWING]
       sticker_text: "CT4-V BLACKWING|BLACKWING"
 
   - key: year_2022_plus

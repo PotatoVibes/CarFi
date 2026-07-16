@@ -78,6 +78,38 @@ def test_reject_matcher_with_nothing():
         load_profile_str(bad)
 
 
+def test_reject_vin_any_without_vin_attr():
+    bad = """
+    name: x
+    model_key: y
+    hard:
+      - key: k
+        label: l
+        kind: require
+        matcher:
+          vin_any: [2LT]
+    """
+    with pytest.raises(ProfileError):
+        load_profile_str(bad)
+
+
+def test_vin_matcher_alone_is_valid():
+    p = load_profile_str(
+        """
+    name: x
+    model_key: y
+    hard:
+      - key: k
+        label: l
+        kind: require
+        matcher:
+          vin_attr: trim
+          vin_any: [2lt, 3lt]
+    """
+    )
+    assert p.hard[0].matcher.vin_any == ["2LT", "3LT"]  # normalized upper
+
+
 def test_reject_unknown_color_family():
     bad = """
     name: x

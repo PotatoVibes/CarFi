@@ -130,13 +130,16 @@ def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
     )
 
 
-def all_conflicts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def all_conflicts(conn: sqlite3.Connection, include_excluded: bool = False) -> list[dict[str, Any]]:
+    """Cross-source conflicts, hiding excluded cars by default — a conflict on
+    a car that already hard-failed is noise, not something to review."""
     rows = conn.execute(
         """
         SELECT c.vin, c.field, c.winner, c.values_json, c.detected_at,
-               v.year, v.make, v.model
+               v.year, v.make, v.model, m.verdict
         FROM conflicts c
         LEFT JOIN vehicles v ON v.vin = c.vin
+        LEFT JOIN match_results m ON m.vin = c.vin
         ORDER BY c.detected_at DESC, c.vin
         """
     ).fetchall()
@@ -150,8 +153,10 @@ def all_conflicts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "year": r["year"],
             "make": r["make"],
             "model": r["model"],
+            "verdict": r["verdict"],
         }
         for r in rows
+        if include_excluded or r["verdict"] != "excluded"
     ]
 
 

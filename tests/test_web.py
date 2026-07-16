@@ -82,10 +82,20 @@ def test_budget_page(seeded_settings):
     assert "autodev" in r.text and "anthropic" in r.text
 
 
-def test_conflicts_page(seeded_settings):
-    r = _client(seeded_settings).get("/conflicts")
+def test_conflicts_page_hides_excluded_by_default(seeded_settings):
+    c = _client(seeded_settings)
+    r = c.get("/conflicts")
     assert r.status_code == 200
-    assert "year" in r.text  # the seeded conflict field
+    assert C8_VIN not in r.text  # excluded car's conflict is noise
+    r2 = c.get("/conflicts?show_excluded=true")
+    assert C8_VIN in r2.text  # available on request
+
+
+def test_matches_table_is_sortable_and_filterable(seeded_settings):
+    r = _client(seeded_settings).get("/m/c8_stingray")
+    assert 'data-key="price"' in r.text  # sortable headers
+    assert 'id="q"' in r.text  # filter box
+    assert f'data-vin="{REVIEW_VIN}"' in r.text  # row data attrs for sort/filter
 
 
 def test_detail_links_to_dealer_listing(seeded_settings):

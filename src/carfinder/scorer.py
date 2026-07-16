@@ -39,10 +39,18 @@ class MatchOutcome:
 def match(matcher: Matcher, vehicle: Vehicle, key: str | None = None) -> MatchOutcome:
     """Resolve a matcher against a vehicle, preferring verified evidence.
 
-    Verified data (a complete window sticker) yields a definitive True/False.
-    Only when verified evidence is absent do we fall back to claimed evidence
-    (dealer free-text, then the AI extractor's per-attribute claim for ``key``).
+    Verified data (a VIN-decoded fact or a complete window sticker) yields a
+    definitive True/False. Only when verified evidence is absent do we fall
+    back to claimed evidence (dealer free-text, then the AI extractor's
+    per-attribute claim for ``key``).
     """
+    # 0. VIN-decoded fact — definitive both ways: the VIN physically encodes
+    #    trim/body/model, so a fact outside vin_any is a verified "no".
+    if matcher.vin_attr:
+        fact = vehicle.vin_facts.get(matcher.vin_attr)
+        if fact is not None:
+            return MatchOutcome(fact in matcher.vin_any, Provenance.verified)
+
     # 1. Verified RPO code hit. (Empty sets/lists make any() False, so no guard.)
     if any(code in vehicle.verified_rpo for code in matcher.rpo):
         return MatchOutcome(True, Provenance.verified)

@@ -51,10 +51,14 @@ def test_vehicle_detail_conflicts(seeded_settings):
     assert det.conflicts[0]["winner"] == "sticker"
 
 
-def test_all_conflicts(seeded_settings):
+def test_all_conflicts_hides_excluded_cars_by_default(seeded_settings):
+    # The seeded conflict is on the excluded C8 — a car that already
+    # hard-failed. Its conflict is noise, hidden unless explicitly requested.
     conn = _conn(seeded_settings)
-    items = store.all_conflicts(conn)
+    assert store.all_conflicts(conn) == []
+    items = store.all_conflicts(conn, include_excluded=True)
     assert len(items) == 1 and items[0]["vin"] == C8_VIN
+    assert items[0]["verdict"] == "excluded"
 
 
 def test_vehicle_detail_unknown(seeded_settings):

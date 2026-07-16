@@ -13,16 +13,25 @@ query:
 # Every matcher carries a sticker-text regex as the drift-proof safety net;
 # RPO codes (where given) are the precise signal, corrected in M2.
 hard:
+  # vin_attr matchers decode identity straight from the VIN (verified, zero
+  # API calls): trim series in pos 5, body in pos 6, engine in pos 8 — all
+  # corpus-verified in src/carfinder/vin.py. Z51 and MagneRide are options,
+  # NOT in the VIN, so those still need the window sticker.
   - key: model_stingray
     label: Corvette Stingray
     kind: require
     matcher:
+      vin_attr: model
+      vin_any: [STINGRAY]
       sticker_text: "STINGRAY"
 
   - key: not_z06_eray
     label: Not Z06 / E-Ray
     kind: forbid
     matcher:
+      # A VIN-decoded STINGRAY fact is a verified "not Z06/E-Ray".
+      vin_attr: model
+      vin_any: [Z06, ERAY]
       sticker_text: "Z06|E-RAY|E RAY|ERAY"
 
   - key: year_2021_plus
@@ -34,6 +43,8 @@ hard:
     label: Convertible (hardtop)
     kind: require
     matcher:
+      vin_attr: body    # VIN pos 6: 2=coupe, 3=convertible (corpus-verified)
+      vin_any: [CONVERTIBLE]
       # VERIFIED against 1G1YC3D47P5121316: stickers print "STINGRAY CONV"
       # (never the full word) plus the retractable-hardtop line. The original
       # "CONVERTIBLE"-only pattern would have verified-FAILED every convertible.
@@ -44,6 +55,8 @@ hard:
     label: 2LT or 3LT
     kind: require
     matcher:
+      vin_attr: trim    # VIN pos 5: A=1LT, B=2LT, C=3LT (corpus-verified)
+      vin_any: [2LT, 3LT]
       rpo: [2LT, 3LT]   # VERIFIED: trim code rides in the factory options list
       sticker_text: "2LT|3LT"
 

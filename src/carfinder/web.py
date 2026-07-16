@@ -207,13 +207,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _TEMPLATES.TemplateResponse(request, "budget.html", {"usage": usage})
 
     @app.get("/conflicts", response_class=HTMLResponse)
-    def conflicts(request: Request):
+    def conflicts(request: Request, show_excluded: bool = False):
         c = conn()
         try:
-            items = store.all_conflicts(c)
+            items = store.all_conflicts(c, include_excluded=show_excluded)
         finally:
             c.close()
-        return _TEMPLATES.TemplateResponse(request, "conflicts.html", {"conflicts": items})
+        return _TEMPLATES.TemplateResponse(
+            request, "conflicts.html", {"conflicts": items, "show_excluded": show_excluded}
+        )
 
     @app.get("/sticker/{vin}")
     def sticker(vin: str):
