@@ -51,6 +51,85 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        3,
+        """
+        -- Raw per-source listings. A VIN can appear from multiple sources;
+        -- (source, vin) is the natural key. raw_json keeps the full payload
+        -- for reprocessing without a refetch.
+        CREATE TABLE listings (
+            source     TEXT NOT NULL,            -- 'autodev' | 'marketcheck'
+            vin        TEXT NOT NULL,
+            price      REAL,
+            miles      INTEGER,
+            year       INTEGER,
+            make       TEXT,
+            model      TEXT,
+            trim       TEXT,
+            color      TEXT,
+            created_at TEXT,                      -- source's listing-created ts
+            url        TEXT,
+            raw_json   TEXT NOT NULL,
+            first_seen TEXT NOT NULL,             -- when we first ingested it
+            last_seen  TEXT NOT NULL,             -- last sync run that saw it
+            PRIMARY KEY (source, vin)
+        );
+
+        -- Merged canonical record per VIN (deduped across sources) + delist
+        -- bookkeeping. Scoring/sticker status live alongside for the UI.
+        CREATE TABLE vehicles (
+            vin           TEXT PRIMARY KEY,
+            model_key     TEXT,                   -- which profile it was matched under
+            year          INTEGER,
+            make          TEXT,
+            model         TEXT,
+            trim          TEXT,
+            color         TEXT,
+            miles         INTEGER,
+            price         REAL,                   -- best (lowest) current price
+            status        TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'presumed_sold'
+            missing_passes INTEGER NOT NULL DEFAULT 0,     -- full passes VIN was absent
+            first_seen    TEXT NOT NULL,
+            last_seen     TEXT NOT NULL
+        );
+
+        -- Append-only price observations for drop detection + sparklines.
+        CREATE TABLE price_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin         TEXT NOT NULL,
+            source      TEXT NOT NULL,
+            price       REAL NOT NULL,
+            observed_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_price_history_vin ON price_history (vin);
+
+        -- One row per sync run for auditing + weekly-full-pass scheduling.
+        CREATE TABLE sync_runs (
+            run_id        TEXT PRIMARY KEY,
+            source        TEXT NOT NULL,
+            model_key     TEXT,
+            mode          TEXT NOT NULL,          -- 'incremental' | 'full'
+            started_at    TEXT NOT NULL,
+            finished_at   TEXT,
+            pages_fetched INTEGER NOT NULL DEFAULT 0,
+            new_vins      INTEGER NOT NULL DEFAULT 0,
+            updated_vins  INTEGER NOT NULL DEFAULT 0,
+            calls         INTEGER NOT NULL DEFAULT 0
+        );
+
+        -- Latest scorer output per VIN (breakdown kept as JSON for the UI).
+        CREATE TABLE match_results (
+            vin            TEXT PRIMARY KEY,
+            model_key      TEXT NOT NULL,
+            verdict        TEXT NOT NULL,         -- 'ranked'|'needs_review'|'excluded'
+            soft_score     REAL NOT NULL,
+            highlight_bonus REAL NOT NULL,
+            total          REAL NOT NULL,
+            breakdown_json TEXT NOT NULL,
+            scored_at      TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
