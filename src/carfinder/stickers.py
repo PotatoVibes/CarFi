@@ -88,6 +88,10 @@ class StickerFetcher:
         # BLOCKED is transient (Akamai mood) — allow a retry on a later run.
         return None
 
+    def is_cached(self, vin: str) -> bool:
+        """True if fetch(vin) would answer without a network call."""
+        return self._cached(vin.strip().upper()) is not None
+
     # -- politeness ----------------------------------------------------------
 
     def _rate_limit(self) -> None:

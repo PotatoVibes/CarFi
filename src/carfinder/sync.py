@@ -34,6 +34,9 @@ class SyncStats:
     price_changes: int = 0
     stopped_early: bool = False
     seen_vins: list[str] = field(default_factory=list)
+    # VINs that are new or had a price change this run — the pipeline only needs
+    # to (re)fetch stickers and (re)score these, not every seen VIN.
+    new_or_changed: list[str] = field(default_factory=list)
     presumed_sold: list[str] = field(default_factory=list)
 
 
@@ -222,10 +225,12 @@ class SyncEngine:
                 stats.seen_vins.append(row.vin)
                 if status == "new":
                     stats.new_vins += 1
+                    stats.new_or_changed.append(row.vin)
                     page_all_known_unchanged = False
                 elif status == "price_change":
                     stats.price_changes += 1
                     stats.updated_vins += 1
+                    stats.new_or_changed.append(row.vin)
                     page_all_known_unchanged = False
 
             if mode == "incremental" and page_all_known_unchanged:
