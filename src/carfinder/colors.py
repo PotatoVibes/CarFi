@@ -41,7 +41,7 @@ _C8_PAINT: dict[str, ColorFamily] = {
     # white
     "GAZ": ColorFamily.white,  # Arctic White       # VERIFY
     # black
-    "GBA": ColorFamily.black,  # Black              # VERIFY
+    "GBA": ColorFamily.black,  # Black — VERIFIED (1G1YC3D47P5121316, "BLACK")
     "GAR": ColorFamily.black,  # Carbon Flash Met.  # VERIFY
     # gray / silver
     "GXD": ColorFamily.gray,  # Ceramic Matrix Gray # VERIFY

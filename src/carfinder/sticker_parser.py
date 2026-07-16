@@ -33,10 +33,12 @@ _RPO_TOKEN = re.compile(r'"([A-Z0-9]{2,3})"')
 _MSRP = re.compile(r"TOTAL VEHICLE PRICE\*?\s*\$\s*([\d,]+(?:\.\d{2})?)")
 _TOTAL_WITH_OPTIONS = re.compile(r"TOTAL VEHICLE & OPTIONS\s*\$\s*([\d,]+(?:\.\d{2})?)")
 _YEAR_TITLE = re.compile(r"\b(20[2-9]\d)\b")
-# "EXTERIOR: BLACK RAVEN ENGINE, 3.6L ..." — column merge glues the engine
-# column on; cut at known right-column labels.
-_EXTERIOR = re.compile(r"EXTERIOR:\s*(.+?)(?:\s+(?:ENGINE|TRANSMISSION|INTERIOR)\b|$)")
-_INTERIOR = re.compile(r"INTERIOR:\s*(.+?)(?:\s+(?:ENGINE|TRANSMISSION|EXTERIOR)\b|$)")
+# Column merge glues the engine column onto the paint line. Cadillac prints
+# "EXTERIOR: BLACK RAVEN ENGINE, 3.6L ..." (label first); Chevy prints
+# "EXTERIOR: BLACK 6.2L V8 DI ENGINE" (displacement first) — cut at either.
+_COLUMN_CUT = r"(?:\s+(?:ENGINE|TRANSMISSION|INTERIOR|\d+\.\d+L)\b|$)"
+_EXTERIOR = re.compile(r"EXTERIOR:\s*(.+?)" + _COLUMN_CUT)
+_INTERIOR = re.compile(r"INTERIOR:\s*(.+?)" + _COLUMN_CUT)
 
 
 @dataclass

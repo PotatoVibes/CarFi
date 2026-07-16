@@ -26,26 +26,35 @@ hard:
     label: Convertible (hardtop)
     kind: require
     matcher:
-      sticker_text: "CONVERTIBLE"
+      # VERIFIED against 1G1YC3D47P5121316: stickers print "STINGRAY CONV"
+      # (never the full word) plus the retractable-hardtop line. The original
+      # "CONVERTIBLE"-only pattern would have verified-FAILED every convertible.
+      # \b after CONV keeps "CONVENIENCE PACKAGE" from matching.
+      sticker_text: "CONVERTIBLE|CONV\\b|HARD TOP W/REMOTE"
 
   - key: trim_2lt_3lt
     label: 2LT or 3LT
     kind: require
     matcher:
+      rpo: [2LT, 3LT]   # VERIFIED: trim code rides in the factory options list
       sticker_text: "2LT|3LT"
 
   - key: z51
     label: Z51 Performance Package
     kind: require
     matcher:
-      rpo: Z51
+      rpo: Z51          # VERIFIED on 1G1YC3D47P5121316
       sticker_text: "Z51"
 
   - key: magneride
     label: Magnetic Ride Control
     kind: require
     matcher:
-      rpo: [FE4, FE2]   # VERIFY - MagneRide RPO on C8
+      # 1G1YC3D47P5121316 (Z51, NO MagneRide) carries FE3 and prints no
+      # "MAGNETIC" text — so FE3 = non-magnetic Z51 suspension, and FE2 was
+      # noise (dropped). FE4 = MagneRide per order guide; VERIFY when a
+      # MagneRide car lands.
+      rpo: FE4
       sticker_text: "MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE"
 
 # --- Soft requirements (weighted penalty curves) --------------------------
@@ -86,9 +95,7 @@ highlights:
   - label: Performance Data Recorder
     bonus: 3
     matcher:
-      # UQT confirmed as PDR on the 2022 CT4-V BW fixture (same code family);
-      # still VERIFY against a real C8 sticker when one lands.
-      rpo: UQT
+      rpo: UQT          # VERIFIED on 1G1YC3D47P5121316 (C8) and the BW fixture
       sticker_text: "PERFORMANCE DATA"
   - label: Competition Sport seats
     bonus: 5
@@ -123,7 +130,9 @@ highlights:
   - label: Colored seat belts
     bonus: 1
     matcher:
-      sticker_text: "SEAT BELT.*(RED|BLUE|YELLOW|ORANGE)"
+      # Real stickers print color-first: "TORCH RED SEAT BELT 495.00"
+      # (1G1YC3D47P5121316). Cover both orderings.
+      sticker_text: "(RED|BLUE|YELLOW|ORANGE).{0,15}SEAT BELT|SEAT BELT.{0,25}(RED|BLUE|YELLOW|ORANGE)"
   - label: Custom stitch package
     bonus: 1
     matcher:
