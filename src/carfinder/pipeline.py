@@ -182,8 +182,10 @@ class Pipeline:
         qualifies = result.verdict == "ranked" and result.total >= self._notify_threshold
         if not qualifies:
             return False
-        was = prior is not None and prior["verdict"] == "ranked" and (
-            prior["total"] >= self._notify_threshold
+        was = (
+            prior is not None
+            and prior["verdict"] == "ranked"
+            and (prior["total"] >= self._notify_threshold)
         )
         if was:
             return False

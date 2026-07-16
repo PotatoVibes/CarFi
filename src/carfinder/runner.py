@@ -11,9 +11,9 @@ import sqlite3
 from pathlib import Path
 
 from .config import Settings
+from .models import Profile
 from .pipeline import PipelineStats, build_pipeline
 from .profiles import ProfileError, load_profile
-from .models import Profile
 
 
 def load_profiles(config_dir: str | Path) -> list[Profile]:
