@@ -95,9 +95,7 @@ def record_call(
     conn.commit()
 
 
-def count_calls(
-    conn: sqlite3.Connection, provider: str, start: datetime, end: datetime
-) -> int:
+def count_calls(conn: sqlite3.Connection, provider: str, start: datetime, end: datetime) -> int:
     """Count ledger rows for a provider in [start, end)."""
     row = conn.execute(
         "SELECT COUNT(*) FROM api_calls WHERE provider = ? AND ts >= ? AND ts < ?",
@@ -106,9 +104,7 @@ def count_calls(
     return int(row[0])
 
 
-def sum_cost(
-    conn: sqlite3.Connection, provider: str, start: datetime, end: datetime
-) -> float:
+def sum_cost(conn: sqlite3.Connection, provider: str, start: datetime, end: datetime) -> float:
     """Sum cost_usd for a provider in [start, end)."""
     row = conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) FROM api_calls "
