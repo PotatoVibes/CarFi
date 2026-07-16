@@ -129,10 +129,22 @@ class StickerFetcher:
                 self._pdf_path(vin).write_bytes(resp.content)
                 log.info("sticker %s cached (%d bytes)", vin, len(resp.content))
                 return FOUND
-            if resp.status_code == 200 or resp.status_code == 404:
-                # 200-but-not-PDF is GM's "no sticker for this VIN" page.
-                log.info("sticker %s not found (HTTP %d)", vin, resp.status_code)
+            if resp.status_code == 200 and b'"errorCode"' in resp.content[:200]:
+                # GM's definitive JSON miss, e.g. errorCode 1001 "No Window
+                # Sticker found for the requested VIN." (2021-and-older VINs
+                # aren't served by this endpoint at all.)
+                log.info("sticker %s not found: %s", vin, resp.content[:120])
                 return NOT_FOUND
+            if resp.status_code == 404:
+                log.info("sticker %s not found (HTTP 404)", vin)
+                return NOT_FOUND
+            if resp.status_code == 200:
+                # 200 with an unrecognized body — likely an interstitial /
+                # denial page. Treat as blocked (retryable), never as a miss.
+                log.warning("sticker %s unrecognized 200 body: %s", vin, resp.content[:120])
+                self._sleep(backoff)
+                backoff *= 2
+                continue
             # 403 = Akamai denial; 5xx = transient. Both: back off and retry.
             log.warning("sticker %s attempt %d HTTP %d", vin, attempt, resp.status_code)
             self._sleep(backoff)

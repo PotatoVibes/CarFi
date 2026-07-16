@@ -18,7 +18,9 @@ hard:
     label: 6-speed manual
     kind: require
     matcher:
-      rpo: MX0          # VERIFY - 6-spd manual RPO on CT4-V BW
+      # VERIFIED against 1G6D65RP8N0460286 (manual car): MG9 present, my
+      # original MX0 guess absent. Text regex remains the primary net.
+      rpo: MG9
       sticker_text: "6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION"
 
   # Super Cruise / auto excluded implicitly by the manual requirement; a
@@ -27,12 +29,14 @@ hard:
     label: Ventilated seats
     kind: require
     matcher:
+      rpo: KU9          # VERIFIED on 1G6D65RP8N0460286 (ventilated frt seats)
       sticker_text: "VENTILATED"
 
   - key: head_up_display
     label: Head-Up Display
     kind: require
     matcher:
+      rpo: UV6          # VERIFIED on 1G6D65RP8N0460286 (HUD)
       sticker_text: "HEAD-UP DISPLAY|HEAD UP DISPLAY|HUD"
 
 # --- Soft requirements (weighted penalty curves) --------------------------
@@ -82,10 +86,12 @@ highlights:
   - label: Power sunroof
     bonus: 3
     matcher:
+      rpo: CF5          # VERIFIED on 1G6D65RP8N0460286 (sunroof $1,050)
       sticker_text: "SUNROOF"
   - label: Performance Data Recorder
     bonus: 2
     matcher:
+      rpo: UQT          # VERIFIED on 1G6D65RP8N0460286 (PDR $1,600)
       sticker_text: "PERFORMANCE DATA"
   - label: Massaging seats
     bonus: 2
@@ -96,7 +102,9 @@ highlights:
   - label: Painted calipers
     bonus: 1
     matcher:
-      sticker_text: "BRONZE.*CALIPER|RED.*CALIPER|BLUE.*CALIPER"
+      # Real stickers print "BRAKE CALIPERS, RED" (color AFTER the noun) —
+      # original color-first pattern missed it. Fixed against 0460286.
+      sticker_text: "(BRONZE|RED|BLUE).{0,20}CALIPER|CALIPERS?,?\\s*(BRONZE|RED|BLUE)"
   - label: Red seat belts
     bonus: 1
     matcher:

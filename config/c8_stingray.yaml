@@ -86,7 +86,9 @@ highlights:
   - label: Performance Data Recorder
     bonus: 3
     matcher:
-      rpo: UQT          # VERIFY - PDR code on C8
+      # UQT confirmed as PDR on the 2022 CT4-V BW fixture (same code family);
+      # still VERIFY against a real C8 sticker when one lands.
+      rpo: UQT
       sticker_text: "PERFORMANCE DATA"
   - label: Competition Sport seats
     bonus: 5
@@ -115,7 +117,9 @@ highlights:
   - label: Painted calipers
     bonus: 1
     matcher:
-      sticker_text: "RED.*CALIPER|YELLOW.*CALIPER|ORANGE.*CALIPER|EDGE RED CALIPER"
+      # Real stickers print "BRAKE CALIPERS, <COLOR>" (seen on the BW fixture);
+      # cover both orderings.
+      sticker_text: "(RED|YELLOW|ORANGE|EDGE RED).{0,20}CALIPER|CALIPERS?,?\\s*(RED|YELLOW|ORANGE)"
   - label: Colored seat belts
     bonus: 1
     matcher:

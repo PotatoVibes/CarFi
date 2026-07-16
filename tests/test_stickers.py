@@ -59,12 +59,15 @@ def test_cached_vin_is_never_refetched(tmp_path):
     assert guard.usage(GM_STICKER).used == 1  # one network call, ever
 
 
+GM_MISS = b'{"errorCode":1001,"errorMessage":"No Window Sticker found for the requested VIN."}'
+
+
 def test_not_found_recorded_and_not_retried(tmp_path):
     hits = []
 
     def handler(request):
         hits.append(1)
-        return httpx.Response(200, content=b"<html>no sticker</html>")
+        return httpx.Response(200, content=GM_MISS)
 
     fetcher, conn, guard, _ = _fetcher(tmp_path, handler)
     first = fetcher.fetch(VIN)
@@ -78,6 +81,15 @@ def test_not_found_recorded_and_not_retried(tmp_path):
 def test_404_is_not_found(tmp_path):
     fetcher, _, _, _ = _fetcher(tmp_path, lambda r: httpx.Response(404))
     assert fetcher.fetch(VIN).status == NOT_FOUND
+
+
+def test_unrecognized_200_body_is_blocked_not_missed(tmp_path):
+    # An HTML interstitial with HTTP 200 must never be recorded as a
+    # definitive miss — that would permanently skip a real sticker.
+    html = httpx.Response(200, content=b"<html>please verify you are human</html>")
+    fetcher, conn, _, _ = _fetcher(tmp_path, lambda r: html, max_retries=2)
+    assert fetcher.fetch(VIN).status == BLOCKED
+    assert db.get_sticker_status(conn, VIN)["status"] == BLOCKED
 
 
 def test_akamai_denial_retries_with_backoff_then_blocked(tmp_path):
