@@ -22,7 +22,9 @@ log = logging.getLogger("carfinder.scheduler")
 def _sync_job(settings: Settings, mode: str) -> None:
     conn = bootstrap(settings.db_path)
     try:
-        results = run_sync(conn, settings, datetime.now(UTC).year, mode=mode)
+        results = run_sync(
+            conn, settings, datetime.now(UTC).year, mode=mode, config_dir=settings.config_dir
+        )
         total_new = sum(s.sync.new_vins for s in results.values())
         log.info("scheduled %s sync done: %d new across %d models", mode, total_new, len(results))
     except Exception:  # a scheduler job must never crash the process

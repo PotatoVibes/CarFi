@@ -56,7 +56,8 @@ uv run carfinder serve       # → http://127.0.0.1:8000   (Docker: already runn
   you haven't seen since your last visit (tracked by a browser cookie, per model).
 - **Car detail** — every hard requirement with a ✓/✗ and a *verified / claimed /
   unknown* tag, the soft-score bars, highlight badges, price history, any
-  cross-source conflicts, and a link to the actual **window-sticker PDF**.
+  cross-source conflicts, a **view listing ↗** link to the dealer's page, and a
+  link to the actual **window-sticker PDF**.
 - **Budget** — how much of each month's quota you've used.
 - **Conflicts** — where a listing disagreed with the window sticker.
 
@@ -64,8 +65,12 @@ Browsing needs **no API keys** — it only reads the local database.
 
 ### Running a sync
 
-- **From the UI:** click **Sync now** (top-right). Runs an incremental sync in
-  the background.
+- **From the UI:** click **Sync now** (top-right, or on the home page's
+  **Actions** row, which also has **Full pass** and **Rescore** buttons). The job
+  runs in the background and a **live status pill** in the header shows what it's
+  doing in real time (which page it's fetching, which car it's scoring). When it
+  finishes, the page refreshes itself so you're looking at the latest results;
+  if it fails (e.g. a budget cap), the pill turns red with the reason.
 - **From the terminal (headless — no server needed):**
   ```bash
   uv run carfinder sync          # incremental: cheap, grabs new listings
@@ -149,6 +154,8 @@ soft:
 
 ### Apply your changes with `rescore`
 
+Click **Rescore** on the home page, or run:
+
 ```bash
 uv run carfinder rescore
 ```
@@ -196,9 +203,10 @@ Two caveats for a brand-new model:
 | I want to… | Do this |
 |---|---|
 | See current matches | `carfinder serve` → http://127.0.0.1:8000 |
-| Pull the latest listings | `carfinder sync` (or **Sync now**) |
-| Full refresh (price drops, sold cars) | `carfinder sync --full` (weekly) |
-| Change what I'm looking for | edit `config/*.yaml`, then `carfinder rescore` |
+| Pull the latest listings | **Sync now** button (or `carfinder sync`) |
+| Full refresh (price drops, sold cars) | **Full pass** button (or `carfinder sync --full`, weekly) |
+| Open the actual dealer listing | car detail page → **view listing ↗** |
+| Change what I'm looking for | edit `config/*.yaml`, then the **Rescore** button (or `carfinder rescore`) |
 | Add a model | new `config/<model>.yaml`, then `carfinder sync` |
 | Check my spend | `carfinder budget` |
 | Back up everything | copy `data/carfinder.sqlite` |

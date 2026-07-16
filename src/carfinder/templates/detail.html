@@ -21,6 +21,7 @@
 <p>
   {% if v.miles is not none %}{{ "{:,}".format(v.miles) }} mi · {% endif %}
   {% if v.price is not none %}${{ "{:,.0f}".format(v.price) }}{% endif %}
+  {% if d.listing_url %}· <a href="{{ d.listing_url }}" target="_blank" rel="noopener">view listing ↗</a>{% endif %}
   {% if sticker_pdf %}· <a href="/sticker/{{ v.vin }}">window sticker (PDF)</a>{% endif %}
 </p>
 

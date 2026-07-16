@@ -93,6 +93,7 @@ class VehicleDetail:
     sticker: dict[str, Any] | None
     conflicts: list[dict[str, Any]] = field(default_factory=list)
     price_history: list[dict[str, Any]] = field(default_factory=list)
+    listing_url: str | None = None
 
 
 def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
@@ -112,6 +113,11 @@ def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
             "SELECT price, observed_at FROM price_history WHERE vin = ? ORDER BY id", (vin,)
         ).fetchall()
     ]
+    listing = conn.execute(
+        "SELECT url FROM listings WHERE vin = ? AND url IS NOT NULL "
+        "ORDER BY last_seen DESC LIMIT 1",
+        (vin,),
+    ).fetchone()
     return VehicleDetail(
         vin=vin,
         vehicle=dict(v),
@@ -120,6 +126,7 @@ def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
         sticker=dict(s) if s else None,
         conflicts=conflicts,
         price_history=prices,
+        listing_url=listing["url"] if listing else None,
     )
 
 

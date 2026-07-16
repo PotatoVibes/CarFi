@@ -200,6 +200,7 @@ class SyncEngine:
         run_id: str | None = None,
         max_pages: int = 50,
         sort: str = "createdAt.desc",
+        progress: Callable[[str], None] | None = None,
     ) -> SyncStats:
         run_id = run_id or uuid4().hex
         started = _iso(self._now())
@@ -212,6 +213,11 @@ class SyncEngine:
 
         page = 1
         while page <= max_pages:
+            if progress is not None:
+                progress(
+                    f"fetching page {page} ({stats.new_vins} new, "
+                    f"{stats.price_changes} price changes so far)"
+                )
             result = self._source.search_page(params, page=page, sort=sort, run_id=run_id)
             stats.pages_fetched += 1
             if not result.rows:

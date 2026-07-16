@@ -170,6 +170,13 @@ def seeded_settings(tmp_path) -> Settings:
         "INSERT INTO sync_runs (run_id, source, model_key, mode, started_at, new_vins) "
         "VALUES ('r1','autodev','c8_stingray','incremental','2026-07-15T12:00:00Z', 3)"
     )
+    # A listing row so the detail page can link to the dealer VDP.
+    conn.execute(
+        """INSERT INTO listings (source, vin, price, url, raw_json, first_seen, last_seen)
+           VALUES ('autodev', ?, 58000, 'https://dealer.example/bw-listing', '{}',
+                   '2026-07-01T00:00:00Z', '2026-07-15T12:00:00Z')""",
+        (BW_VIN,),
+    )
     conn.commit()
     conn.close()
     return Settings(

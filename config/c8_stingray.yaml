@@ -25,10 +25,10 @@ hard:
     matcher:
       sticker_text: "Z06|E-RAY|E RAY|ERAY"
 
-  - key: year_2022_plus
-    label: 2022 or newer
+  - key: year_2021_plus
+    label: 2021 or newer
     kind: year_min
-    min_year: 2022
+    min_year: 2021
 
   - key: convertible
     label: Convertible (hardtop)
@@ -80,7 +80,7 @@ soft:
     label: Price
     kind: numeric
     attr: price
-    ideal: 65000
+    ideal: 63000
     hard: 70000
     direction: lower_better
     weight: 0.25

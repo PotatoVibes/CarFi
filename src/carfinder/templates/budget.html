@@ -13,7 +13,8 @@
       <td>{% if u.kind == "cost" %}${{ "%.2f"|format(u.cap) }}{% else %}{{ "%.0f"|format(u.cap) }}{% endif %}</td>
       <td style="width:220px"><div class="bar"><span style="width: {{ [pct, 100]|min }}%;
         background: {{ '#e08a8a' if pct >= 90 else '#e0cf7e' if pct >= 75 else '#6ea8ff' }}"></span></div></td>
-      <td class="muted">{{ "%.1f"|format(pct) }}%</td>
+      <td class="muted">{{ "%.1f"|format(pct) }}% used ·
+        {% if u.kind == "cost" %}${{ "%.2f"|format(u.remaining) }}{% else %}{{ "%.0f"|format(u.remaining) }}{% endif %} left</td>
     </tr>
   {% endfor %}
   </tbody>

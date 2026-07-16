@@ -81,15 +81,21 @@ class Pipeline:
         profile: Profile,
         mode: str = "incremental",
         run_id: str | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> PipelineStats:
         if self._engine is None:
             raise ValueError("run() needs a listing source; none was configured")
         params = build_listing_params(profile, self._current_year)
-        sync_stats = self._engine.sync(params, profile.model_key, mode=mode, run_id=run_id)
+        sync_stats = self._engine.sync(
+            params, profile.model_key, mode=mode, run_id=run_id, progress=progress
+        )
         stats = PipelineStats(sync=sync_stats)
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
-        for vin in dict.fromkeys(sync_stats.new_or_changed):  # de-dupe, keep order
+        todo = list(dict.fromkeys(sync_stats.new_or_changed))  # de-dupe, keep order
+        for i, vin in enumerate(todo, 1):
+            if progress is not None:
+                progress(f"scoring {i}/{len(todo)} — {vin}")
             self._process_vin(vin, profile, attributes, sync_stats.run_id, stats)
 
         if stats.sticker_capped:
@@ -100,7 +106,12 @@ class Pipeline:
             )
         return stats
 
-    def rescore(self, profile: Profile, run_id: str = "rescore") -> PipelineStats:
+    def rescore(
+        self,
+        profile: Profile,
+        run_id: str = "rescore",
+        progress: Callable[[str], None] | None = None,
+    ) -> PipelineStats:
         """Re-score every known vehicle for a profile without syncing.
 
         For cars processed before, sticker and AI results are cache hits, so
@@ -115,7 +126,9 @@ class Pipeline:
                 "SELECT vin FROM vehicles WHERE model_key = ?", (profile.model_key,)
             ).fetchall()
         ]
-        for vin in vins:
+        for i, vin in enumerate(vins, 1):
+            if progress is not None:
+                progress(f"re-scoring {i}/{len(vins)} — {vin}")
             self._process_vin(vin, profile, attributes, run_id, stats)
         return stats
 

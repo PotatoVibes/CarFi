@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
 from carfinder.web import create_app
@@ -86,7 +88,63 @@ def test_conflicts_page(seeded_settings):
     assert "year" in r.text  # the seeded conflict field
 
 
-def test_sync_now_without_key_redirects(seeded_settings):
+def test_detail_links_to_dealer_listing(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}")
+    assert "https://dealer.example/bw-listing" in r.text
+
+
+def test_sync_now_without_key_flashes(seeded_settings):
     r = _client(seeded_settings).post("/sync", follow_redirects=False)
     assert r.status_code == 303
-    assert "no_key" in r.headers["location"]
+    assert "flash=" in r.headers["location"]
+    # The flash renders on the index page.
+    r2 = _client(seeded_settings).get(r.headers["location"])
+    assert "AUTODEV_API_KEY" in r2.text
+
+
+def test_full_sync_without_key_flashes(seeded_settings):
+    r = _client(seeded_settings).post("/sync/full", follow_redirects=False)
+    assert r.status_code == 303
+    assert "flash=" in r.headers["location"]
+
+
+def test_job_status_idle(seeded_settings):
+    job = _client(seeded_settings).get("/api/job").json()["job"]
+    assert job["state"] == "idle"
+    assert job["kind"] is None
+
+
+def _wait_for_job(client, timeout: float = 15.0) -> dict:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        job = client.get("/api/job").json()["job"]
+        if job["state"] in ("done", "error"):
+            return job
+        time.sleep(0.05)
+    raise AssertionError(f"job did not finish: {job}")
+
+
+def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
+    # Keep the job fully offline: the fake REVIEW_VIN isn't sticker-cached, so
+    # stub the fetcher to answer from cache with not_found.
+    from carfinder.stickers import NOT_FOUND, FetchResult, StickerFetcher
+
+    monkeypatch.setattr(StickerFetcher, "is_cached", lambda self, vin: True)
+    monkeypatch.setattr(
+        StickerFetcher,
+        "fetch",
+        lambda self, vin, run_id=None: FetchResult(
+            vin=vin, status=NOT_FOUND, path=None, from_cache=True
+        ),
+    )
+    c = _client(seeded_settings)
+    r = c.post("/rescore", follow_redirects=False)
+    assert r.status_code == 303
+    job = _wait_for_job(c)
+    assert job["state"] == "done", job
+    assert "re-scored" in job["summary"]
+    assert job["started_at"] and job["finished_at"]
+    # A second job can start once the first finished (lock released).
+    r2 = c.post("/rescore", follow_redirects=False)
+    assert r2.status_code == 303 and "flash=" not in r2.headers["location"]
+    assert _wait_for_job(c)["state"] == "done"

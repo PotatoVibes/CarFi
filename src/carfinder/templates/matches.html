@@ -21,7 +21,8 @@
     <tr>
       <td class="score">{{ "%.0f"|format(r.total) }}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
-          {% if r.is_new %}<span class="badge new">new</span>{% endif %}</td>
+          {% if r.is_new %}<span class="badge new">new</span>{% endif %}
+          {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}</td>
       <td>{{ r.year or "?" }}</td>
       <td><span class="chip" style="background: {{ chip_hex(model_key, None, r.color) }}"></span>
           {{ r.color or "—" }}</td>

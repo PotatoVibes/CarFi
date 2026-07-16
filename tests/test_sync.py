@@ -153,6 +153,16 @@ def test_reappearing_vin_resets_missing_passes():
     assert conn.execute("SELECT status FROM vehicles WHERE vin='B'").fetchone()[0] == "active"
 
 
+def test_progress_reported_per_page():
+    p1 = [_row("A", 60000)]
+    p2 = [_row("B", 61000)]
+    eng, _, _ = _engine([p1, p2])
+    seen: list[str] = []
+    eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1", progress=seen.append)
+    assert len(seen) == 2  # one message before each page fetch
+    assert "page 1" in seen[0] and "page 2" in seen[1]
+
+
 def test_sync_run_recorded():
     eng, conn, _ = _engine([[_row("A", 60000)]])
     eng.sync(PARAMS, "c8_stingray", run_id="r1")
