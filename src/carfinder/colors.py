@@ -63,7 +63,7 @@ _CT4V_PAINT: dict[str, ColorFamily] = {
     "G7C": ColorFamily.red,  # Infrared Tintcoat    # VERIFY
     "GAZ": ColorFamily.white,  # Summit White       # VERIFY
     "G1W": ColorFamily.white,  # Crystal White Tri. # VERIFY
-    "GBA": ColorFamily.black,  # Black Raven        # VERIFY
+    "GBA": ColorFamily.black,  # Black Raven — VERIFIED (1G6D65RP8N0460286)
     "GLK": ColorFamily.gray,  # Rift Metallic (gray)# VERIFY
     "G9K": ColorFamily.gray,  # Shadow Metallic     # VERIFY
     "GNL": ColorFamily.silver,  # Radiant Silver    # VERIFY
@@ -92,6 +92,11 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("BROWN", ColorFamily.brown),
     ("CAFFEINE", ColorFamily.brown),
 ]
+
+
+def paint_codes(model_key: str) -> set[str]:
+    """All known paint RPO codes for a model (for options-list intersection)."""
+    return set(_PAINT_TABLES.get(model_key, {}))
 
 
 def family_from_rpo(model_key: str, paint_rpo: str | None) -> ColorFamily | None:
