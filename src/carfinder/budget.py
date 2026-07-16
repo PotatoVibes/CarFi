@@ -27,6 +27,7 @@ log = logging.getLogger("carfinder.budget")
 # Provider identifiers (also the `provider` value stored in the ledger).
 AUTODEV = "autodev"
 ANTHROPIC = "anthropic"
+GM_STICKER = "gm_sticker"
 
 # Metering kinds.
 COUNT = "count"
@@ -87,6 +88,9 @@ class BudgetGuard:
         providers = {
             AUTODEV: ProviderBudget(AUTODEV, COUNT, float(settings.monthly_call_cap_autodev)),
             ANTHROPIC: ProviderBudget(ANTHROPIC, COST, float(settings.monthly_ai_budget_usd)),
+            # GM sticker endpoint is free, but every outbound call is still
+            # gated + recorded; the cap is a runaway-loop backstop, not a quota.
+            GM_STICKER: ProviderBudget(GM_STICKER, COUNT, float(settings.monthly_call_cap_gm)),
         }
         return cls(conn, providers)
 

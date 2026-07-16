@@ -38,6 +38,8 @@ class Settings:
     anthropic_api_key: str | None
     monthly_call_cap_autodev: int
     monthly_ai_budget_usd: float
+    monthly_call_cap_gm: int
+    stickers_dir: Path
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -49,4 +51,6 @@ def load_settings(env_file: Path | None = None) -> Settings:
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
         monthly_call_cap_autodev=int(os.environ.get("MONTHLY_CALL_CAP_AUTODEV", "800")),
         monthly_ai_budget_usd=float(os.environ.get("MONTHLY_AI_BUDGET_USD", "2")),
+        monthly_call_cap_gm=int(os.environ.get("MONTHLY_CALL_CAP_GM", "500")),
+        stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR", "stickers")),
     )

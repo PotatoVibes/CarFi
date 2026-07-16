@@ -37,6 +37,20 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX idx_api_calls_provider_ts ON api_calls (provider, ts);
         """,
     ),
+    (
+        2,
+        """
+        -- Window sticker fetch outcomes. One row per VIN, updated on retry,
+        -- so a not-found VIN isn't hammered every sync run.
+        CREATE TABLE stickers (
+            vin        TEXT PRIMARY KEY,
+            status     TEXT NOT NULL,            -- 'found' | 'not_found' | 'blocked'
+            fetched_at TEXT NOT NULL,            -- ISO8601 UTC of last attempt
+            path       TEXT,                     -- cached PDF path when found
+            attempts   INTEGER NOT NULL DEFAULT 1
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -112,3 +126,34 @@ def sum_cost(conn: sqlite3.Connection, provider: str, start: datetime, end: date
         (provider, _iso(start), _iso(end)),
     ).fetchone()
     return float(row[0])
+
+
+# --- sticker fetch outcomes -------------------------------------------------
+
+
+def get_sticker_status(conn: sqlite3.Connection, vin: str) -> sqlite3.Row | None:
+    """Return the recorded fetch outcome for a VIN, or None if never attempted."""
+    return conn.execute("SELECT * FROM stickers WHERE vin = ?", (vin,)).fetchone()
+
+
+def record_sticker_outcome(
+    conn: sqlite3.Connection,
+    vin: str,
+    status: str,
+    ts: datetime,
+    path: str | None = None,
+) -> None:
+    """Upsert the fetch outcome for a VIN, bumping the attempt counter."""
+    conn.execute(
+        """
+        INSERT INTO stickers (vin, status, fetched_at, path, attempts)
+        VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT(vin) DO UPDATE SET
+            status = excluded.status,
+            fetched_at = excluded.fetched_at,
+            path = excluded.path,
+            attempts = attempts + 1
+        """,
+        (vin, status, _iso(ts), path),
+    )
+    conn.commit()

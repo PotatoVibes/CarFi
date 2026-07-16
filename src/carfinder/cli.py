@@ -22,6 +22,25 @@ def _fmt(usage_value: float, kind: str) -> str:
 
 
 @app.command()
+def fetch_stickers(vins: list[str]) -> None:
+    """Fetch window sticker PDFs for one or more VINs (cache-first)."""
+    settings = load_settings()
+    conn = bootstrap(settings.db_path)
+    try:
+        from .stickers import StickerFetcher
+
+        guard = BudgetGuard.from_settings(conn, settings)
+        fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
+        for vin in vins:
+            result = fetcher.fetch(vin)
+            source = "cache" if result.from_cache else "live"
+            location = f" -> {result.path}" if result.path else ""
+            typer.echo(f"  {result.vin}  {result.status:<10} ({source}){location}")
+    finally:
+        conn.close()
+
+
+@app.command()
 def budget() -> None:
     """Print month-to-date API usage per provider."""
     settings = load_settings()
