@@ -221,6 +221,10 @@ class Vehicle(BaseModel):
 
     # Claimed evidence (dealer listing free-text / structured fields).
     claimed_text: str = ""
+    # Per-requirement claims from the AI extractor (M5), keyed by constraint key
+    # / highlight label: "claimed" | "denied" | "not_mentioned". Always claimed
+    # provenance — can raise a soft score, never satisfy a hard requirement.
+    claimed_features: dict[str, str] = Field(default_factory=dict)
 
     # Paint / color.
     paint_rpo: str | None = None

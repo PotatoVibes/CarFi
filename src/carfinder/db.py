@@ -146,6 +146,22 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX idx_conflicts_vin ON conflicts (vin);
         """,
     ),
+    (
+        5,
+        """
+        -- Cache of AI (Haiku) extraction responses, keyed by a hash of
+        -- model + attribute list + input text/PDF. temperature=0 makes the
+        -- call deterministic, so a cache hit is a free, exact replay — no
+        -- second call ever hits the Anthropic budget for the same input.
+        CREATE TABLE ai_cache (
+            cache_key     TEXT PRIMARY KEY,
+            model         TEXT NOT NULL,
+            response_json TEXT NOT NULL,          -- extracted {attr: status}
+            cost_usd      REAL NOT NULL,          -- actual cost of the original call
+            created_at    TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -244,6 +260,29 @@ def replace_conflicts(
         "INSERT INTO conflicts (vin, field, winner, values_json, detected_at) "
         "VALUES (?, ?, ?, ?, ?)",
         [(vin, field, winner, values_json, _iso(ts)) for field, winner, values_json in rows],
+    )
+    conn.commit()
+
+
+def get_ai_cache(conn: sqlite3.Connection, cache_key: str) -> sqlite3.Row | None:
+    """Return a cached AI extraction, or None on a miss."""
+    return conn.execute("SELECT * FROM ai_cache WHERE cache_key = ?", (cache_key,)).fetchone()
+
+
+def put_ai_cache(
+    conn: sqlite3.Connection,
+    cache_key: str,
+    model: str,
+    response_json: str,
+    cost_usd: float,
+    ts: datetime,
+) -> None:
+    """Store an AI extraction response (idempotent on cache_key)."""
+    conn.execute(
+        """INSERT INTO ai_cache (cache_key, model, response_json, cost_usd, created_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(cache_key) DO NOTHING""",
+        (cache_key, model, response_json, cost_usd, _iso(ts)),
     )
     conn.commit()
 

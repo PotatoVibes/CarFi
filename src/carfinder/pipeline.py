@@ -15,8 +15,13 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
+
+import httpx
 
 from . import colors, db
+from .ai import Attribute, HaikuExtractor
+from .budget import BudgetExceeded
 from .models import Profile, Provenance, Vehicle
 from .query import build_listing_params
 from .reconcile import Facts, reconcile
@@ -39,6 +44,9 @@ class PipelineStats:
     excluded: int = 0
     conflicts: int = 0
     sticker_capped: bool = False
+    ai_calls: int = 0  # new (non-cached) AI extraction calls this run
+    ai_cost_usd: float = 0.0
+    ai_budget_exhausted: bool = False
 
 
 class Pipeline:
@@ -50,6 +58,7 @@ class Pipeline:
         current_year: int,
         now: Callable[[], datetime] | None = None,
         max_stickers_per_run: int = 50,
+        extractor: HaikuExtractor | None = None,
     ):
         self._conn = conn
         self._fetcher = fetcher
@@ -57,6 +66,7 @@ class Pipeline:
         self._current_year = current_year
         self._now = now or (lambda: datetime.now(UTC))
         self._max_stickers = max_stickers_per_run
+        self._extractor = extractor
 
     def run(
         self,
@@ -68,13 +78,18 @@ class Pipeline:
         sync_stats = self._engine.sync(params, profile.model_key, mode=mode, run_id=run_id)
         stats = PipelineStats(sync=sync_stats)
 
+        attributes = _profile_attributes(profile) if self._extractor is not None else []
+
         for vin in dict.fromkeys(sync_stats.new_or_changed):  # de-dupe, keep order
-            parsed = self._maybe_sticker(vin, sync_stats.run_id, stats)
+            parsed, sticker_path = self._maybe_sticker(vin, sync_stats.run_id, stats)
             row = self._conn.execute(
                 "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
                 (vin,),
             ).fetchone()
-            vehicle = self._build_vehicle(vin, profile.model_key, parsed, row)
+            claimed_features = self._ai_features(
+                vin, parsed, sticker_path, row, attributes, sync_stats.run_id, stats
+            )
+            vehicle = self._build_vehicle(vin, profile.model_key, parsed, row, claimed_features)
             result = score_vehicle(profile, vehicle)
             self._persist(vin, profile.model_key, result)
             self._log_conflicts(vin, profile.model_key, parsed, row)
@@ -97,29 +112,62 @@ class Pipeline:
     # -- steps ---------------------------------------------------------------
 
     def _maybe_sticker(self, vin: str, run_id: str, stats: PipelineStats):
-        """Fetch + parse the sticker, honoring the per-run network-fetch cap."""
+        """Fetch + parse the sticker, honoring the per-run network-fetch cap.
+
+        Returns (parsed_or_None, pdf_path_or_None)."""
         would_network = not self._fetcher.is_cached(vin)
         if would_network and stats.stickers_fetched >= self._max_stickers:
             stats.sticker_capped = True
-            return None
+            return None, None
         result = self._fetcher.fetch(vin, run_id=run_id)
         if not result.from_cache:
             stats.stickers_fetched += 1
         if result.status == FOUND and result.path is not None:
             try:
-                return parse_sticker(result.path)
+                return parse_sticker(result.path), result.path
             except Exception as exc:  # a bad PDF must not crash the whole run
                 log.warning("sticker parse failed for %s: %s", vin, exc)
-        return None
+        return None, None
 
-    def _build_vehicle(self, vin: str, model_key: str, parsed, row) -> Vehicle:
-        """Merge verified sticker data with claimed listing data into a Vehicle."""
+    def _ai_features(
+        self, vin, parsed, sticker_path, row, attributes, run_id, stats: PipelineStats
+    ) -> dict[str, str]:
+        """AI fallback (M5): claimed features from dealer text when no sticker,
+        or a vision re-parse when the sticker parsed at low confidence. Every
+        result is claimed provenance — it can never satisfy a hard requirement."""
+        if self._extractor is None or not attributes:
+            return {}
+        try:
+            if parsed is None:
+                text = _claimed_text(row)
+                if not text:
+                    return {}
+                ext = self._extractor.extract(text, attributes, run_id=run_id)
+            elif not parsed.complete and sticker_path is not None:
+                ext = self._extractor.extract_from_pdf(
+                    Path(sticker_path).read_bytes(), attributes, run_id=run_id
+                )
+            else:
+                return {}  # complete verified sticker — no AI needed
+        except BudgetExceeded:
+            stats.ai_budget_exhausted = True
+            return {}
+        except (httpx.HTTPError, OSError) as exc:
+            log.warning("AI extraction failed for %s: %s", vin, exc)
+            return {}
+        if not ext.cached:
+            stats.ai_calls += 1
+        stats.ai_cost_usd += ext.cost_usd
+        return ext.features
+
+    def _build_vehicle(
+        self, vin: str, model_key: str, parsed, row, claimed_features: dict[str, str]
+    ) -> Vehicle:
+        """Merge verified sticker data with claimed listing/AI data into a Vehicle."""
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
-        claimed_text = " ".join(
-            str(row[k]) for k in ("make", "model", "trim", "color") if row and row[k]
-        )
+        claimed_text = _claimed_text(row)
 
         if parsed is not None:
             kw = vehicle_kwargs(parsed, model_key)
@@ -129,6 +177,7 @@ class Pipeline:
                 kw["year"] = listing_year
             # Keep the listing text as a claimed fallback alongside verified data.
             kw["claimed_text"] = claimed_text
+            kw["claimed_features"] = claimed_features
             return Vehicle(**kw)
 
         # No sticker: listing data only (claimed provenance).
@@ -139,6 +188,7 @@ class Pipeline:
             price=price,
             claimed_text=claimed_text,
             color_text=(row["color"] if row else None),
+            claimed_features=claimed_features,
         )
 
     def _log_conflicts(self, vin: str, model_key: str, parsed, row) -> None:
@@ -209,3 +259,20 @@ class Pipeline:
             ),
         )
         self._conn.commit()
+
+
+def _claimed_text(row) -> str:
+    """Build a claimed dealer-text blob from a vehicles row."""
+    if row is None:
+        return ""
+    return " ".join(str(row[k]) for k in ("make", "model", "trim", "color") if row[k])
+
+
+def _profile_attributes(profile: Profile) -> list[Attribute]:
+    """The attribute list the AI extractor classifies — hard require/forbid
+    constraints (by key) and highlights (by label, matching the scorer's key)."""
+    attrs = [
+        Attribute(key=c.key, label=c.label) for c in profile.hard if c.kind in ("require", "forbid")
+    ]
+    attrs += [Attribute(key=h.label, label=h.label) for h in profile.highlights]
+    return attrs

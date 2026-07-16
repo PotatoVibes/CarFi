@@ -36,11 +36,12 @@ class MatchOutcome:
     provenance: Provenance
 
 
-def match(matcher: Matcher, vehicle: Vehicle) -> MatchOutcome:
+def match(matcher: Matcher, vehicle: Vehicle, key: str | None = None) -> MatchOutcome:
     """Resolve a matcher against a vehicle, preferring verified evidence.
 
     Verified data (a complete window sticker) yields a definitive True/False.
-    Only when verified evidence is absent do we fall back to claimed text.
+    Only when verified evidence is absent do we fall back to claimed evidence
+    (dealer free-text, then the AI extractor's per-attribute claim for ``key``).
     """
     # 1. Verified RPO code hit. (Empty sets/lists make any() False, so no guard.)
     if any(code in vehicle.verified_rpo for code in matcher.rpo):
@@ -59,7 +60,15 @@ def match(matcher: Matcher, vehicle: Vehicle) -> MatchOutcome:
     if pattern and vehicle.claimed_text and pattern.search(vehicle.claimed_text):
         return MatchOutcome(True, Provenance.claimed)
 
-    # 5. Nothing to go on.
+    # 5. AI-extracted per-attribute claim (also claimed provenance).
+    if key is not None:
+        status = vehicle.claimed_features.get(key)
+        if status == "claimed":
+            return MatchOutcome(True, Provenance.claimed)
+        if status == "denied":
+            return MatchOutcome(False, Provenance.claimed)
+
+    # 6. Nothing to go on.
     return MatchOutcome(None, Provenance.unknown)
 
 
@@ -72,7 +81,7 @@ def _evaluate_hard(
     if c.kind == "year_min":
         return _evaluate_year_min(c, vehicle)
 
-    outcome = match(c.matcher, vehicle)  # type: ignore[arg-type]
+    outcome = match(c.matcher, vehicle, key=c.key)  # type: ignore[arg-type]
     if c.kind == "require":
         return _resolve_require(c, outcome, review_on_unknown)
     return _resolve_forbid(c, outcome, review_on_unknown)
@@ -219,7 +228,7 @@ def _evaluate_color(c: SoftConstraint, vehicle: Vehicle, model_key: str) -> _Sof
 
 
 def _evaluate_highlight(h: Highlight, vehicle: Vehicle) -> RequirementResult:
-    outcome = match(h.matcher, vehicle)
+    outcome = match(h.matcher, vehicle, key=h.label)
     applied = h.bonus if outcome.matched is True else 0.0
     return RequirementResult(
         key=h.label,
