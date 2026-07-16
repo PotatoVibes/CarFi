@@ -13,16 +13,22 @@ from .models import Profile
 # Fields we pull back on every listing. Auto.dev returns these as flat,
 # dot-keyed properties when `select` is present. Kept centrally so the
 # normalizer and the projection stay in sync.
+#
+# NOTE (from the M3 fixture capture): the listing odometer lives at
+# retailListing.miles — vehicle.mileage is the spec value and comes back null
+# on real listings. The detail URL is retailListing.vdp (not vdpUrl).
 SELECT_FIELDS = (
     "vehicle.vin",
     "vehicle.year",
     "vehicle.make",
     "vehicle.model",
     "vehicle.trim",
-    "vehicle.mileage",
+    "vehicle.style",  # "Coupe" / "Convertible" — a claimed body-style hint
+    "retailListing.miles",
     "vehicle.exteriorColor",
     "retailListing.price",
-    "retailListing.vdpUrl",
+    "retailListing.dealer",
+    "retailListing.vdp",
     "createdAt",
 )
 

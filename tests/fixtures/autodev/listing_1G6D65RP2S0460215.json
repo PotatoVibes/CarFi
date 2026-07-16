@@ -1,0 +1,53 @@
+{
+  "links": {
+    "self": "https://api.auto.dev/listings/1G6D65RP2S0460215",
+    "next": "https://api.auto.dev/listings/1G6D65RP2T0460295"
+  },
+  "data": {
+    "vin": "1G6D65RP2S0460215",
+    "createdAt": "2026-07-15 08:26:33",
+    "location": [
+      -73.58255371892956,
+      40.64713579121219
+    ],
+    "vehicle": {
+      "baseInvoice": 59085,
+      "baseMsrp": 62195,
+      "bodyStyle": "Car",
+      "confidence": 0.995,
+      "cylinders": 6,
+      "doors": 4,
+      "drivetrain": "RWD",
+      "engine": "3.6L 6Cyl premium unleaded (required)",
+      "fuel": "Gasoline",
+      "interiorColor": "Black",
+      "make": "Cadillac",
+      "model": "CT4-V",
+      "seats": 5,
+      "series": "V Blackwing 4dr Sedan (3.6L 6cyl Turbo 6M)",
+      "squishVin": "1G6D65RPS0",
+      "style": "Sedan",
+      "transmission": "Manual",
+      "trim": "V Blackwing",
+      "type": "Luxury",
+      "vin": "1G6D65RP2S0460215",
+      "year": 2025
+    },
+    "wholesaleListing": null,
+    "retailListing": {
+      "carfaxUrl": "https://www.carfax.com/VehicleHistory/p/Report.cfx?vin=1G6D65RP2S0460215&partner=FRD_2",
+      "city": "Freeport",
+      "cpo": false,
+      "dealer": "Porsche South Shore",
+      "miles": 3645,
+      "photoCount": 37,
+      "price": 69170,
+      "primaryImage": "https://retail.photos.vin/1G6D65RP2S0460215-1.jpg",
+      "state": "NY",
+      "used": true,
+      "vdp": "https://www.autolist.com/cadillac-ct4+v#vin=1G6D65RP2S0460215",
+      "dealerId": "d_85d7d8bfe176516c"
+    },
+    "history": null
+  }
+}

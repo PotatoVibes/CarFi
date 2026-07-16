@@ -1,0 +1,50 @@
+{
+  "links": {
+    "self": "https://api.auto.dev/listings/1G1YB2D48S5106930",
+    "next": "https://api.auto.dev/listings/1G1YB2D48S5109052"
+  },
+  "data": {
+    "vin": "1G1YB2D48S5106930",
+    "createdAt": "2026-07-15 22:46:38",
+    "location": [
+      0,
+      0
+    ],
+    "vehicle": {
+      "baseInvoice": 70424,
+      "baseMsrp": 75400,
+      "bodyStyle": "Car",
+      "confidence": 0.995,
+      "cylinders": 8,
+      "doors": 2,
+      "engine": "6.2L 8Cyl premium unleaded (recommended)",
+      "exteriorColor": "Black",
+      "fuel": "Gasoline",
+      "interiorColor": "Other",
+      "make": "Chevrolet",
+      "model": "Corvette",
+      "seats": 2,
+      "series": "Stingray 2dr Coupe w/2LT (6.2L 8cyl 8AM)",
+      "squishVin": "1G1YB2D4S5",
+      "style": "Coupe",
+      "transmission": "Automated Manual",
+      "trim": "Stingray",
+      "type": "Coupe",
+      "vin": "1G1YB2D48S5106930",
+      "year": 2025
+    },
+    "wholesaleListing": null,
+    "retailListing": {
+      "carfaxUrl": "https://www.carfax.com/VehicleHistory/p/Report.cfx?partner=CVN_0&vin=1G1YB2D48S5106930",
+      "cpo": false,
+      "dealer": "Carvana",
+      "miles": 12980,
+      "photoCount": 1,
+      "price": 73590,
+      "primaryImage": "https://retail.photos.vin/1G1YB2D48S5106930-1.jpg",
+      "used": true,
+      "vdp": "https://www.carvana.com/vehicle/4571991"
+    },
+    "history": null
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "links": {
+    "self": "https://api.auto.dev/listings?vehicle.make=Cadillac&vehicle.model=CT4-V&vehicle.year=2022-2027&retailListing.price=1-70200&page=1&limit=20&sort=createdAt.desc&select=vehicle.vin,vehicle.year,vehicle.make,vehicle.model,vehicle.trim,vehicle.mileage,vehicle.exteriorColor,retailListing.price,retailListing.vdpUrl,createdAt&includes=total",
+    "first": "https://api.auto.dev/listings?vehicle.make=Cadillac&vehicle.model=CT4-V&vehicle.year=2022-2027&retailListing.price=1-70200&page=1&limit=20&sort=createdAt.desc&select=vehicle.vin,vehicle.year,vehicle.make,vehicle.model,vehicle.trim,vehicle.mileage,vehicle.exteriorColor,retailListing.price,retailListing.vdpUrl,createdAt&includes=total",
+    "prev": "https://api.auto.dev/listings?vehicle.make=Cadillac&vehicle.model=CT4-V&vehicle.year=2022-2027&retailListing.price=1-70200&page=1&limit=20&sort=createdAt.desc&select=vehicle.vin,vehicle.year,vehicle.make,vehicle.model,vehicle.trim,vehicle.mileage,vehicle.exteriorColor,retailListing.price,retailListing.vdpUrl,createdAt&includes=total",
+    "last": "https://api.auto.dev/listings?vehicle.make=Cadillac&vehicle.model=CT4-V&vehicle.year=2022-2027&retailListing.price=1-70200&page=1&limit=20&sort=createdAt.desc&select=vehicle.vin,vehicle.year,vehicle.make,vehicle.model,vehicle.trim,vehicle.mileage,vehicle.exteriorColor,retailListing.price,retailListing.vdpUrl,createdAt&includes=total"
+  },
+  "total": 13,
+  "totalFormatted": "13",
+  "data": [
+    {
+      "vehicle.vin": "1G6D65RP2S0460215",
+      "vehicle.year": 2025,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": null,
+      "retailListing.price": 69170,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-15 08:26:33"
+    },
+    {
+      "vehicle.vin": "1G6DL5RP1P0460531",
+      "vehicle.year": 2023,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "White",
+      "retailListing.price": 64998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-13 01:06:31"
+    },
+    {
+      "vehicle.vin": "1G6DL5RP0P0411157",
+      "vehicle.year": 2023,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "White",
+      "retailListing.price": 60998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-09 20:28:30"
+    },
+    {
+      "vehicle.vin": "1G6D75RP7N0411089",
+      "vehicle.year": 2022,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": null,
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Black",
+      "retailListing.price": 30625,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-07 21:16:10"
+    },
+    {
+      "vehicle.vin": "1G6DD5RLXR0125569",
+      "vehicle.year": 2024,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Black",
+      "retailListing.price": 47998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-04 23:20:41"
+    },
+    {
+      "vehicle.vin": "1G6D75RP6N0410466",
+      "vehicle.year": 2022,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": null,
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Blaze Orange Metallic",
+      "retailListing.price": 44689,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-07-03 00:19:08"
+    },
+    {
+      "vehicle.vin": "1G6DH5RLXP0124939",
+      "vehicle.year": 2023,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Red",
+      "retailListing.price": 38998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-30 01:11:38"
+    },
+    {
+      "vehicle.vin": "1G6D65RP0R0460174",
+      "vehicle.year": 2024,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Yellow",
+      "retailListing.price": 62998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-28 23:23:54"
+    },
+    {
+      "vehicle.vin": "1G6DH5RL5P0123651",
+      "vehicle.year": 2023,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Black",
+      "retailListing.price": 33998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-25 00:02:41"
+    },
+    {
+      "vehicle.vin": "1G6DH5RL5S0102064",
+      "vehicle.year": 2025,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Gray",
+      "retailListing.price": 49998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-23 19:55:04"
+    },
+    {
+      "vehicle.vin": "1G6DL5RPXP0410176",
+      "vehicle.year": 2023,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Gray",
+      "retailListing.price": 53998,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-17 01:10:28"
+    },
+    {
+      "vehicle.vin": "1G6D75RP0R0410176",
+      "vehicle.year": 2024,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V Blackwing",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Silver",
+      "retailListing.price": 63491,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2026-06-09 08:10:43"
+    },
+    {
+      "vehicle.vin": "1G6DH5RL0S0121136",
+      "vehicle.year": 2025,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Black",
+      "retailListing.price": 61277,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2025-05-30 03:19:57"
+    },
+    {
+      "vehicle.vin": "1G6DH5RL5S0120919",
+      "vehicle.year": 2025,
+      "vehicle.make": "Cadillac",
+      "vehicle.model": "CT4-V",
+      "vehicle.trim": "V",
+      "vehicle.mileage": null,
+      "vehicle.exteriorColor": "Black",
+      "retailListing.price": 62331,
+      "retailListing.vdpUrl": null,
+      "createdAt": "2025-04-26 19:49:55"
+    }
+  ]
+}

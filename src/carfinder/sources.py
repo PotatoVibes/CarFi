@@ -110,7 +110,7 @@ def normalize(item: dict[str, Any], source: str) -> ListingRow:
             item, "vehicle.exteriorColor", "vehicle.exterior_color", "vehicle.color", "color"
         ),
         created_at=_first(item, "createdAt", "created_at"),
-        url=_first(item, "retailListing.vdpUrl", "retailListing.clickoffUrl", "url"),
+        url=_first(item, "retailListing.vdp", "retailListing.vdpUrl", "url"),
         raw=item,
     )
 
