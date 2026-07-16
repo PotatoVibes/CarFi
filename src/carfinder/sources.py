@@ -5,6 +5,9 @@ BudgetGuard — there is no other path to the network here.
 
 from __future__ import annotations
 
+import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -12,6 +15,12 @@ import httpx
 
 from .budget import AUTODEV, BudgetGuard
 from .query import SELECT_FIELDS
+
+log = logging.getLogger("carfinder.sources")
+
+# Starter tier allows 5 req/s. Stay under it with a small min interval, and
+# retry the statuses that mean "slow down" or "transient".
+_RETRYABLE = {429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -130,20 +139,61 @@ class AutoDevSource:
         guard: BudgetGuard,
         client: httpx.Client | None = None,
         page_size: int = 20,  # Starter free-tier cap
+        min_interval_s: float = 0.25,  # <= 4 req/s, under the 5/s tier limit
+        max_retries: int = 4,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         self._guard = guard
         self._page_size = page_size
+        self._min_interval = min_interval_s
+        self._max_retries = max_retries
+        self._sleep = sleep
+        self._last_request_at: float | None = None
         self._client = client or httpx.Client(
             base_url=self.BASE_URL,
             headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
             timeout=30.0,
         )
 
+    def _rate_limit(self) -> None:
+        """Space requests out to stay under the tier's per-second limit."""
+        if self._last_request_at is not None:
+            elapsed = time.monotonic() - self._last_request_at
+            if elapsed < self._min_interval:
+                self._sleep(self._min_interval - elapsed)
+        self._last_request_at = time.monotonic()
+
     def _get(self, path: str, params: dict, endpoint: str, run_id: str | None) -> dict:
-        with self._guard.reserve(AUTODEV, endpoint, run_id=run_id):
-            resp = self._client.get(path, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        backoff = 1.0
+        last_exc: httpx.HTTPStatusError | None = None
+        for attempt in range(1, self._max_retries + 1):
+            self._rate_limit()
+            # Every attempt is a real outbound call, so it's gated + recorded.
+            with self._guard.reserve(AUTODEV, endpoint, run_id=run_id):
+                resp = self._client.get(path, params=params)
+            if resp.status_code in _RETRYABLE:
+                retry_after = resp.headers.get("retry-after")
+                wait = float(retry_after) if (retry_after or "").isdigit() else backoff
+                log.warning(
+                    "auto.dev %s HTTP %d (attempt %d) — waiting %.1fs",
+                    endpoint,
+                    resp.status_code,
+                    attempt,
+                    wait,
+                )
+                try:
+                    last_exc = resp.raise_for_status()  # type: ignore[assignment]
+                except httpx.HTTPStatusError as exc:
+                    last_exc = exc
+                self._sleep(wait)
+                backoff *= 2
+                continue
+            resp.raise_for_status()  # non-retryable 4xx -> raise immediately
+            return resp.json()
+        # Exhausted retries on a retryable status.
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"auto.dev {endpoint}: retries exhausted")
 
     def search_page(
         self,

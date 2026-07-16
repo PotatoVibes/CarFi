@@ -17,8 +17,10 @@ def test_seed_profiles_load():
     bw = load_profile(CONFIG / "ct4v_blackwing.yaml")
     assert c8.model_key == "c8_stingray"
     assert bw.model_key == "ct4v_blackwing"
-    # Sanity: the documented hard requirements are present.
-    assert {c.key for c in c8.hard} >= {"z51", "magneride", "convertible", "year_2022_plus"}
+    # Sanity: the documented hard requirements are present. Year floor is
+    # checked by kind (not key) so tuning the min year doesn't break this.
+    assert {c.key for c in c8.hard} >= {"z51", "magneride", "convertible"}
+    assert any(c.kind == "year_min" for c in c8.hard)
     assert {c.key for c in bw.hard} >= {
         "manual_transmission",
         "head_up_display",

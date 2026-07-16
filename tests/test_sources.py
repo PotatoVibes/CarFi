@@ -15,11 +15,22 @@ from carfinder.sources import (
 )
 
 
-def _source(handler, cap: float = 100, page_size: int = 20):
+def _source(handler, cap: float = 100, page_size: int = 20, max_retries: int = 4):
     conn = db.bootstrap(":memory:")
     guard = BudgetGuard(conn, {AUTODEV: ProviderBudget(AUTODEV, "count", cap)})
     client = httpx.Client(base_url=AutoDevSource.BASE_URL, transport=httpx.MockTransport(handler))
-    return AutoDevSource("key", guard, client=client, page_size=page_size), guard
+    sleeps: list[float] = []
+    src = AutoDevSource(
+        "key",
+        guard,
+        client=client,
+        page_size=page_size,
+        min_interval_s=0.0,
+        max_retries=max_retries,
+        sleep=sleeps.append,
+    )
+    src._sleeps = sleeps  # expose for assertions
+    return src, guard
 
 
 # --- normalizer ------------------------------------------------------------
@@ -142,6 +153,68 @@ def test_http_error_raises():
     src, _ = _source(lambda r: httpx.Response(401, json={"error": "unauthorized"}))
     with pytest.raises(httpx.HTTPStatusError):
         src.search_page({})
+
+
+# --- rate limiting + retry -------------------------------------------------
+
+
+def test_429_is_retried_respecting_retry_after():
+    responses = iter(
+        [
+            httpx.Response(429, headers={"retry-after": "2"}, json={}),
+            httpx.Response(200, json={"data": [], "total": 0}),
+        ]
+    )
+    src, guard = _source(lambda r: next(responses))
+    page = src.search_page({})  # succeeds on the retry, no exception
+    assert page.total == 0
+    assert src._sleeps == [2.0]  # honored Retry-After
+    assert guard.usage(AUTODEV).used == 2  # both attempts counted against quota
+
+
+def test_429_exhausts_retries_then_raises():
+    src, _ = _source(lambda r: httpx.Response(429, json={}), max_retries=3)
+    with pytest.raises(httpx.HTTPStatusError):
+        src.search_page({})
+    assert len(src._sleeps) == 3  # backed off on every attempt
+
+
+def test_5xx_retried_with_exponential_backoff():
+    responses = iter([httpx.Response(503, json={}), httpx.Response(200, json={"data": []})])
+    src, _ = _source(lambda r: next(responses))
+    src.search_page({})
+    assert src._sleeps == [1.0]  # no Retry-After -> backoff base
+
+
+def test_non_retryable_4xx_not_retried():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(404, json={})
+
+    src, _ = _source(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        src.search_page({})
+    assert len(calls) == 1  # 404 fails fast, no retry
+    assert src._sleeps == []
+
+
+def test_throttle_spaces_requests(monkeypatch):
+    # With a real min interval and a fake clock, the second call sleeps.
+    conn = db.bootstrap(":memory:")
+    guard = BudgetGuard(conn, {AUTODEV: ProviderBudget(AUTODEV, "count", 100)})
+    client = httpx.Client(
+        base_url=AutoDevSource.BASE_URL,
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"data": []})),
+    )
+    slept: list[float] = []
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("carfinder.sources.time.monotonic", lambda: clock["t"])
+    src = AutoDevSource("k", guard, client=client, min_interval_s=0.25, sleep=slept.append)
+    src.search_page({})  # first call: no wait
+    src.search_page({})  # immediate second call (clock unchanged): must wait
+    assert slept == [0.25]
 
 
 # --- protocol + marketcheck ------------------------------------------------

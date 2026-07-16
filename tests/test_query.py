@@ -13,15 +13,23 @@ from carfinder.query import build_listing_params
 CONFIG = Path(__file__).resolve().parents[1] / "config"
 
 
-def test_c8_prefilter_params_golden():
+def _year_min(profile):
+    return next(c.min_year for c in profile.hard if c.kind == "year_min")
+
+
+def _price_hard(profile):
+    return next(c.hard for c in profile.soft if c.kind == "numeric" and c.attr == "price")
+
+
+def test_c8_prefilter_params_derived_from_profile():
+    # Derives from the seed so tuning preferences (year floor, price) doesn't
+    # break the test — it verifies the builder LOGIC, not specific bounds.
     c8 = load_profile(CONFIG / "c8_stingray.yaml")
     params = build_listing_params(c8, current_year=2026)
-    assert params == {
-        "vehicle.make": "Chevrolet",
-        "vehicle.model": "Corvette",
-        "vehicle.year": "2022-2027",  # year_min 2022 .. current+1
-        "retailListing.price": "1-75600",  # 70000 hard * 1.08, widened
-    }
+    assert params["vehicle.make"] == "Chevrolet"
+    assert params["vehicle.model"] == "Corvette"
+    assert params["vehicle.year"] == f"{_year_min(c8)}-2027"  # year_min .. current+1
+    assert params["retailListing.price"] == f"1-{round(_price_hard(c8) * 1.08)}"  # widened
 
 
 def test_blackwing_prefilter_params_golden():
@@ -29,8 +37,8 @@ def test_blackwing_prefilter_params_golden():
     params = build_listing_params(bw, current_year=2026)
     assert params["vehicle.make"] == "Cadillac"
     assert params["vehicle.model"] == "CT4-V"
-    assert params["vehicle.year"] == "2022-2027"
-    assert params["retailListing.price"] == "1-70200"  # 65000 * 1.08
+    assert params["vehicle.year"] == f"{_year_min(bw)}-2027"
+    assert params["retailListing.price"] == f"1-{round(_price_hard(bw) * 1.08)}"
 
 
 def test_explicit_overrides_win():
