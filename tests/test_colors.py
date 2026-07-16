@@ -1,0 +1,27 @@
+"""Color-family resolution tests."""
+
+from __future__ import annotations
+
+from carfinder import colors
+from carfinder.colors import ColorFamily
+
+
+def test_rpo_lookup_per_model():
+    assert colors.family_from_rpo("c8_stingray", "GM0") == ColorFamily.blue
+    assert colors.family_from_rpo("c8_stingray", "gkz") == ColorFamily.red  # case-insensitive
+    assert colors.family_from_rpo("ct4v_blackwing", "GBA") == ColorFamily.black
+
+
+def test_rpo_unknown_or_missing():
+    assert colors.family_from_rpo("c8_stingray", "ZZZ") is None
+    assert colors.family_from_rpo("c8_stingray", None) is None
+    assert colors.family_from_rpo("no_such_model", "GM0") is None
+
+
+def test_text_classifier_keywords():
+    assert colors.family_from_text("Rapid Blue Metallic") == ColorFamily.blue
+    assert colors.family_from_text("Torch Red") == ColorFamily.red
+    assert colors.family_from_text("Carbon Flash Metallic") == ColorFamily.black  # specific first
+    assert colors.family_from_text("Hypersonic Gray") == ColorFamily.gray
+    assert colors.family_from_text(None) is None
+    assert colors.family_from_text("Chartreuse") is None
