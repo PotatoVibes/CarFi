@@ -1,0 +1,113 @@
+name: Cadillac CT4-V Blackwing
+model_key: ct4v_blackwing
+
+# --- Hard requirements (verified-only pass/fail) --------------------------
+hard:
+  - key: model_ct4v_blackwing
+    label: CT4-V Blackwing
+    kind: require
+    matcher:
+      sticker_text: "CT4-V BLACKWING|BLACKWING"
+
+  - key: year_2022_plus
+    label: 2022 or newer
+    kind: year_min
+    min_year: 2022
+
+  - key: manual_transmission
+    label: 6-speed manual
+    kind: require
+    matcher:
+      rpo: MX0          # VERIFY - 6-spd manual RPO on CT4-V BW
+      sticker_text: "6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION"
+
+  # Super Cruise / auto excluded implicitly by the manual requirement; a
+  # verified automatic sticker will fail manual_transmission above.
+  - key: ventilated_seats
+    label: Ventilated seats
+    kind: require
+    matcher:
+      sticker_text: "VENTILATED"
+
+  - key: head_up_display
+    label: Head-Up Display
+    kind: require
+    matcher:
+      sticker_text: "HEAD-UP DISPLAY|HEAD UP DISPLAY|HUD"
+
+# --- Soft requirements (weighted penalty curves) --------------------------
+soft:
+  - key: miles
+    label: Mileage
+    kind: numeric
+    attr: miles
+    ideal: 50000
+    hard: 60000
+    direction: lower_better
+    weight: 0.20
+
+  - key: price
+    label: Price
+    kind: numeric
+    attr: price
+    ideal: 60000
+    hard: 65000        # "for sure less than" -> hard bound
+    direction: lower_better
+    weight: 0.25
+
+  - key: color
+    label: Color
+    kind: color
+    weight: 0.10
+    preferred: [blue]
+    penalized: [black, white, red]
+
+# --- Highlights (bonus badges; total capped at +10 by the scorer) ---------
+highlights:
+  # Genuinely valuable
+  - label: Carbon Fiber Package 1
+    bonus: 8
+    matcher:
+      rpo: CFZ
+      sticker_text: "CARBON FIBER 1|CARBON FIBER PACKAGE 1"
+  - label: Carbon Fiber Package 2
+    bonus: 6
+    matcher:
+      rpo: CFV
+      sticker_text: "CARBON FIBER 2|CARBON FIBER PACKAGE 2"
+  - label: Sueded microfiber package
+    bonus: 3
+    matcher:
+      sticker_text: "SUEDED MICROFIBER|SUEDE.*STEERING|ALCANTARA"
+  - label: Power sunroof
+    bonus: 3
+    matcher:
+      sticker_text: "SUNROOF"
+  - label: Performance Data Recorder
+    bonus: 2
+    matcher:
+      sticker_text: "PERFORMANCE DATA"
+  - label: Massaging seats
+    bonus: 2
+    matcher:
+      sticker_text: "MASSAG"
+
+  # Cosmetic
+  - label: Painted calipers
+    bonus: 1
+    matcher:
+      sticker_text: "BRONZE.*CALIPER|RED.*CALIPER|BLUE.*CALIPER"
+  - label: Red seat belts
+    bonus: 1
+    matcher:
+      sticker_text: "TORCH RED SEAT BELT|RED SEAT BELT"
+  - label: Upgraded wheel finish
+    bonus: 1
+    matcher:
+      sticker_text: "BLACK.*WHEEL|POLISHED.*WHEEL|DIAMOND CUT"
+
+  # Throwaway (badge only)
+  - label: Dealer-pack accessories
+    bonus: 0
+    matcher:
+      sticker_text: "CARGO MAT|CARGO NET|ILLUMINATED.*SILL|WHEEL LOCK|LUG"

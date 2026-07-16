@@ -1,0 +1,140 @@
+name: C8 Corvette Stingray
+model_key: c8_stingray
+
+# --- Hard requirements (verified-only pass/fail) --------------------------
+# Every matcher carries a sticker-text regex as the drift-proof safety net;
+# RPO codes (where given) are the precise signal, corrected in M2.
+hard:
+  - key: model_stingray
+    label: Corvette Stingray
+    kind: require
+    matcher:
+      sticker_text: "STINGRAY"
+
+  - key: not_z06_eray
+    label: Not Z06 / E-Ray
+    kind: forbid
+    matcher:
+      sticker_text: "Z06|E-RAY|E RAY|ERAY"
+
+  - key: year_2022_plus
+    label: 2022 or newer
+    kind: year_min
+    min_year: 2022
+
+  - key: convertible
+    label: Convertible (hardtop)
+    kind: require
+    matcher:
+      sticker_text: "CONVERTIBLE"
+
+  - key: trim_2lt_3lt
+    label: 2LT or 3LT
+    kind: require
+    matcher:
+      sticker_text: "2LT|3LT"
+
+  - key: z51
+    label: Z51 Performance Package
+    kind: require
+    matcher:
+      rpo: Z51
+      sticker_text: "Z51"
+
+  - key: magneride
+    label: Magnetic Ride Control
+    kind: require
+    matcher:
+      rpo: [FE4, FE2]   # VERIFY - MagneRide RPO on C8
+      sticker_text: "MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE"
+
+# --- Soft requirements (weighted penalty curves) --------------------------
+soft:
+  - key: miles
+    label: Mileage
+    kind: numeric
+    attr: miles
+    ideal: 50000
+    hard: 60000
+    direction: lower_better
+    weight: 0.20
+
+  - key: price
+    label: Price
+    kind: numeric
+    attr: price
+    ideal: 65000
+    hard: 70000
+    direction: lower_better
+    weight: 0.25
+
+  - key: color
+    label: Color
+    kind: color
+    weight: 0.10
+    preferred: [blue]
+    penalized: [black, white, red]
+
+# --- Highlights (bonus badges; total capped at +10 by the scorer) ---------
+highlights:
+  # Genuinely valuable
+  - label: Front lift w/ memory
+    bonus: 8
+    matcher:
+      rpo: E60
+      sticker_text: "FRONT LIFT"
+  - label: Performance Data Recorder
+    bonus: 3
+    matcher:
+      rpo: UQT          # VERIFY - PDR code on C8
+      sticker_text: "PERFORMANCE DATA"
+  - label: Competition Sport seats
+    bonus: 5
+    matcher:
+      sticker_text: "COMPETITION SPORT.*SEAT|COMPETITION SEAT"   # VERIFY code (likely AE4-family)
+  - label: Performance exhaust
+    bonus: 4
+    matcher:
+      rpo: NPP
+      sticker_text: "PERFORMANCE EXHAUST"
+  - label: Visible carbon fiber ground effects
+    bonus: 5
+    matcher:
+      rpo: 5VM          # VERIFY
+      sticker_text: "CARBON FIBER GROUND EFFECTS|VISIBLE CARBON FIBER"
+  - label: Carbon fiber interior trim
+    bonus: 3
+    matcher:
+      sticker_text: "CARBON FIBER.*INTERIOR|INTERIOR.*CARBON"
+  - label: High wing / upgraded spoiler
+    bonus: 2
+    matcher:
+      sticker_text: "HIGH WING|CARBON FLASH SPOILER"
+
+  # Cosmetic
+  - label: Painted calipers
+    bonus: 1
+    matcher:
+      sticker_text: "RED.*CALIPER|YELLOW.*CALIPER|ORANGE.*CALIPER|EDGE RED CALIPER"
+  - label: Colored seat belts
+    bonus: 1
+    matcher:
+      sticker_text: "SEAT BELT.*(RED|BLUE|YELLOW|ORANGE)"
+  - label: Custom stitch package
+    bonus: 1
+    matcher:
+      sticker_text: "STITCH"
+
+  # Throwaway (badge only)
+  - label: Cargo net
+    bonus: 0
+    matcher:
+      sticker_text: "CARGO NET"
+  - label: Wheel locks
+    bonus: 0
+    matcher:
+      sticker_text: "WHEEL LOCK"
+  - label: Dealer-pack accessories
+    bonus: 0
+    matcher:
+      sticker_text: "SPLASH GUARD|FIRST AID|BATTERY PROTECTION|LUG NUT"
