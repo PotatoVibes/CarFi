@@ -1,0 +1,24 @@
+{
+  "status": 402,
+  "error": "Payment Required",
+  "code": "FEATURE_NOT_AVAILABLE",
+  "message": "This feature requires the Growth plan or above. You are currently on the Free plan.",
+  "currentPlan": "Free",
+  "requiredPlan": "Growth",
+  "upgradeUrl": "https://auto.dev/pricing?tier=Growth",
+  "upgradeLink": "https://auto.dev/pricing?tier=Growth",
+  "docsUrl": "https://docs.auto.dev/plans",
+  "plans": {
+    "Growth": {
+      "price": "$299/mo",
+      "rateLimit": "10 req/s",
+      "features": "build, specs, marketvalue, recalls, tco, payments"
+    },
+    "Scale": {
+      "price": "$599/mo",
+      "rateLimit": "50 req/s",
+      "features": "All Growth + openrecalls, plate lookup, taxes"
+    }
+  },
+  "errorCode": 402
+}
