@@ -130,6 +130,22 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        4,
+        """
+        -- Cross-source disagreements, surfaced in the UI and never silently
+        -- resolved. Rewritten per VIN each pipeline run (delete-then-insert).
+        CREATE TABLE conflicts (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin          TEXT NOT NULL,
+            field        TEXT NOT NULL,
+            winner       TEXT NOT NULL,           -- winning source
+            values_json  TEXT NOT NULL,           -- [[source, value], ...]
+            detected_at  TEXT NOT NULL
+        );
+        CREATE INDEX idx_conflicts_vin ON conflicts (vin);
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -213,6 +229,23 @@ def sum_cost(conn: sqlite3.Connection, provider: str, start: datetime, end: date
 def get_sticker_status(conn: sqlite3.Connection, vin: str) -> sqlite3.Row | None:
     """Return the recorded fetch outcome for a VIN, or None if never attempted."""
     return conn.execute("SELECT * FROM stickers WHERE vin = ?", (vin,)).fetchone()
+
+
+def replace_conflicts(
+    conn: sqlite3.Connection,
+    vin: str,
+    rows: list[tuple[str, str, str]],
+    ts: datetime,
+) -> None:
+    """Replace all conflicts for a VIN (delete-then-insert) so re-runs are
+    idempotent. Each row is (field, winner, values_json)."""
+    conn.execute("DELETE FROM conflicts WHERE vin = ?", (vin,))
+    conn.executemany(
+        "INSERT INTO conflicts (vin, field, winner, values_json, detected_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [(vin, field, winner, values_json, _iso(ts)) for field, winner, values_json in rows],
+    )
+    conn.commit()
 
 
 def record_sticker_outcome(

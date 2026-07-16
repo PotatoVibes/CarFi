@@ -164,6 +164,74 @@ def test_second_run_uses_cache_no_new_fetches():
     assert s1.stickers_fetched == 0
 
 
+def test_conflict_logged_when_listing_disagrees_with_sticker():
+    # Sticker (verified) says 2022 Black; listing (claimed) says 2099 and Blue.
+    rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2099,
+            make="Cadillac",
+            model="CT4-V",
+            trim="Blackwing",
+            color="Rapid Blue",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    stats = pipe.run(bw, run_id="r1")
+    assert stats.conflicts >= 2
+    fields = {
+        r["field"]
+        for r in conn.execute("SELECT field FROM conflicts WHERE vin=?", (BW_VIN,)).fetchall()
+    }
+    assert {"year", "exterior"} <= fields
+    # Winner is always the sticker (verified).
+    winners = {
+        r["winner"]
+        for r in conn.execute("SELECT winner FROM conflicts WHERE vin=?", (BW_VIN,)).fetchall()
+    }
+    assert winners == {"sticker"}
+
+
+def test_conflicts_rewritten_idempotently_on_rerun():
+    rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2099,
+            make="Cadillac",
+            model="CT4-V",
+            trim="Blackwing",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+    first = conn.execute("SELECT COUNT(*) FROM conflicts WHERE vin=?", (BW_VIN,)).fetchone()[0]
+    # Re-run with a price change (so the VIN re-processes); conflicts must not
+    # accumulate duplicates.
+    pipe._engine._source.rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=55000,
+            miles=30000,
+            year=2099,
+            make="Cadillac",
+            model="CT4-V",
+            trim="Blackwing",
+        )
+    ]
+    pipe.run(bw, run_id="r2")
+    second = conn.execute("SELECT COUNT(*) FROM conflicts WHERE vin=?", (BW_VIN,)).fetchone()[0]
+    assert first == second == 1  # year conflict only, not duplicated
+
+
 def test_sticker_cap_scores_on_listing_only():
     vin = "1G1YAAAAAA5111111"  # not cached -> would hit network
     rows = [

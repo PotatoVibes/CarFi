@@ -16,8 +16,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from .models import Profile, Vehicle
+from . import colors, db
+from .models import Profile, Provenance, Vehicle
 from .query import build_listing_params
+from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
 from .sources import ListingSource
 from .sticker_parser import parse_sticker, vehicle_kwargs
@@ -35,6 +37,7 @@ class PipelineStats:
     ranked: int = 0
     needs_review: int = 0
     excluded: int = 0
+    conflicts: int = 0
     sticker_capped: bool = False
 
 
@@ -67,13 +70,21 @@ class Pipeline:
 
         for vin in dict.fromkeys(sync_stats.new_or_changed):  # de-dupe, keep order
             parsed = self._maybe_sticker(vin, sync_stats.run_id, stats)
-            vehicle = self._build_vehicle(vin, profile.model_key, parsed)
+            row = self._conn.execute(
+                "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
+                (vin,),
+            ).fetchone()
+            vehicle = self._build_vehicle(vin, profile.model_key, parsed, row)
             result = score_vehicle(profile, vehicle)
             self._persist(vin, profile.model_key, result)
+            self._log_conflicts(vin, profile.model_key, parsed, row)
             stats.scored += 1
             stats.ranked += result.verdict == "ranked"
             stats.needs_review += result.verdict == "needs_review"
             stats.excluded += result.verdict == "excluded"
+            stats.conflicts += self._conn.execute(
+                "SELECT COUNT(*) FROM conflicts WHERE vin=?", (vin,)
+            ).fetchone()[0]
 
         if stats.sticker_capped:
             log.warning(
@@ -101,12 +112,8 @@ class Pipeline:
                 log.warning("sticker parse failed for %s: %s", vin, exc)
         return None
 
-    def _build_vehicle(self, vin: str, model_key: str, parsed) -> Vehicle:
+    def _build_vehicle(self, vin: str, model_key: str, parsed, row) -> Vehicle:
         """Merge verified sticker data with claimed listing data into a Vehicle."""
-        row = self._conn.execute(
-            "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
-            (vin,),
-        ).fetchone()
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
@@ -133,6 +140,46 @@ class Pipeline:
             claimed_text=claimed_text,
             color_text=(row["color"] if row else None),
         )
+
+    def _log_conflicts(self, vin: str, model_key: str, parsed, row) -> None:
+        """Detect + persist sticker-vs-listing disagreements.
+
+        Only genuinely apples-to-apples fields are compared: model year and
+        resolved color family. (Brand strings like sticker "CHEVY" vs listing
+        "Chevrolet", and factory-vs-generic color names, would be spurious.)
+        OEM build data would slot in here as a middle tier when available.
+        """
+        facts: list[Facts] = []
+        if parsed is not None:
+            paint = next((c for c in parsed.options if c in colors.paint_codes(model_key)), None)
+            fam = colors.family_from_rpo(model_key, paint) or colors.family_from_text(
+                parsed.exterior
+            )
+            facts.append(
+                Facts(
+                    source="sticker",
+                    provenance=Provenance.verified,
+                    year=parsed.year,
+                    exterior=fam.value if fam else None,
+                )
+            )
+        if row is not None:
+            fam = colors.family_from_text(row["color"])
+            facts.append(
+                Facts(
+                    source="listing",
+                    provenance=Provenance.claimed,
+                    year=row["year"],
+                    exterior=fam.value if fam else None,
+                )
+            )
+
+        result = reconcile(facts)
+        rows = [
+            (c.field, c.winner, json.dumps(c.values, separators=(",", ":")))
+            for c in result.conflicts
+        ]
+        db.replace_conflicts(self._conn, vin, rows, self._now())
 
     def _persist(self, vin: str, model_key: str, result) -> None:
         breakdown = {
