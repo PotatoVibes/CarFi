@@ -1,6 +1,14 @@
 name: C8 Corvette Stingray
 model_key: c8_stingray
 
+# Server-side prefilter (Auto.dev). Deliberately wider than the hard bounds;
+# the scorer makes the final call. year_max defaults to current year + 1 and
+# price ceiling widens the $70k hard bound by price_margin.
+query:
+  make: Chevrolet
+  model: Corvette
+  price_margin: 0.08
+
 # --- Hard requirements (verified-only pass/fail) --------------------------
 # Every matcher carries a sticker-text regex as the drift-proof safety net;
 # RPO codes (where given) are the precise signal, corrected in M2.

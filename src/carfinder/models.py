@@ -160,6 +160,25 @@ class Highlight(BaseModel):
     matcher: Matcher
 
 
+class ListingQuery(BaseModel):
+    """Server-side prefilter hints for a listing source.
+
+    Bounds are deliberately WIDER than the scorer's hard bounds so fuzzy-band
+    cars aren't excluded server-side — the deterministic scorer, not the API,
+    makes the final call. year_max/price_max default to derived values when
+    omitted (see query.build_listing_params).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    make: str
+    model: str
+    year_min: int | None = None  # else derived from the year_min hard constraint
+    year_max: int | None = None  # else current year + 1
+    price_max: float | None = None  # else derived from the price soft hard bound
+    price_margin: float = Field(default=0.08, ge=0)  # widen a derived price ceiling
+
+
 class Profile(BaseModel):
     """A full requirement profile for one model."""
 
@@ -167,6 +186,7 @@ class Profile(BaseModel):
 
     name: str
     model_key: str
+    query: ListingQuery | None = None
     hard: list[HardConstraint] = Field(default_factory=list)
     soft: list[SoftConstraint] = Field(default_factory=list)
     highlights: list[Highlight] = Field(default_factory=list)

@@ -1,6 +1,14 @@
 name: Cadillac CT4-V Blackwing
 model_key: ct4v_blackwing
 
+# Server-side prefilter (Auto.dev). Wider than the hard bounds by design.
+# NOTE: vehicle.model value ("CT4-V" vs "CT4") is confirmed in the fixture
+# capture; trim-level filtering (Blackwing) is enforced by the scorer anyway.
+query:
+  make: Cadillac
+  model: CT4-V
+  price_margin: 0.08
+
 # --- Hard requirements (verified-only pass/fail) --------------------------
 hard:
   - key: model_ct4v_blackwing
