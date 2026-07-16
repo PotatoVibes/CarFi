@@ -15,8 +15,30 @@ uv run pre-commit install    # optional: enable lint hooks
 ## Usage
 
 ```bash
-uv run carfinder budget      # month-to-date API usage per provider
+uv run carfinder budget                      # month-to-date API usage per provider
+uv run carfinder fetch-stickers VIN [VIN…]   # cache-first GM window sticker fetch
+uv run carfinder sync                        # one-shot sync over every config profile
+uv run carfinder sync --full                 # weekly full pass (price drops + delist)
+uv run carfinder serve                       # web UI + scheduler at http://127.0.0.1:8000
 ```
+
+`carfinder sync` runs headless — point Windows Task Scheduler or cron at it if you
+don't want the server running. `carfinder serve` also starts the APScheduler jobs
+(Mon/Wed/Fri incremental, Sunday full pass) unless you pass `--no-scheduler`.
+
+The web UI (browse without any API key): ranked matches per model, car detail with
+per-attribute provenance and the window-sticker PDF, a budget page, and a conflicts
+page. Optional ntfy/Discord alerts fire when a car crosses `NOTIFY_THRESHOLD`.
+
+## Docker
+
+```bash
+cp .env.example .env         # fill in keys
+docker compose up --build    # serves on http://localhost:8000
+```
+
+Volumes: `./data` (SQLite DB), `./stickers` (cached PDFs), `./config` (profiles,
+read-only). Container healthcheck hits `/health`.
 
 ## Testing
 
