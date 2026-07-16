@@ -17,8 +17,12 @@ def main() -> None:
 
 
 def _fmt(usage_value: float, kind: str) -> str:
-    """Render a usage/cap number: dollars for cost, plain count otherwise."""
-    return f"${usage_value:,.2f}" if kind == COST else f"{usage_value:,.0f}"
+    """Render a usage/cap number: dollars for cost, plain count otherwise.
+
+    Cost uses 4 decimals — AI calls are sub-cent, and a $2 budget would
+    otherwise show every real spend as $0.00.
+    """
+    return f"${usage_value:,.4f}" if kind == COST else f"{usage_value:,.0f}"
 
 
 @app.command()
