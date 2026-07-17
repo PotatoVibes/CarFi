@@ -174,4 +174,12 @@ highlights:
     rpo:
     - J6F
     sticker_text: null
+- label: Cyber Yellow Metallic
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - GCP
+    sticker_text: null
 review_on_unknown_hard: true
