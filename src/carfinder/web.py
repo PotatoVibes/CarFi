@@ -415,24 +415,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return _apply_and_save(model_key, mutate)
 
-    @app.post("/dismiss/{vin}")
-    def dismiss(vin: str, next: str = "/"):
-        """Toggle manual dismissal ('seen it, not interested') for a car."""
+    def _toggle_flag(vin: str, next: str, column: str, opposite: str):
+        """Toggle a user flag on a vehicle; setting it clears the opposite
+        (liked and not-interested are mutually exclusive)."""
         # Only same-site relative redirects (no open-redirect via next=).
         target = next if next.startswith("/") and not next.startswith("//") else "/"
         c = conn()
         try:
-            row = c.execute("SELECT dismissed_at FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+            row = c.execute(f"SELECT {column} FROM vehicles WHERE vin = ?", (vin,)).fetchone()
             if row is None:
                 return HTMLResponse("Unknown VIN", status_code=404)
-            if row["dismissed_at"]:
-                c.execute("UPDATE vehicles SET dismissed_at = NULL WHERE vin = ?", (vin,))
+            if row[column]:
+                c.execute(f"UPDATE vehicles SET {column} = NULL WHERE vin = ?", (vin,))
             else:
-                c.execute("UPDATE vehicles SET dismissed_at = ? WHERE vin = ?", (_now_iso(), vin))
+                c.execute(
+                    f"UPDATE vehicles SET {column} = ?, {opposite} = NULL WHERE vin = ?",
+                    (_now_iso(), vin),
+                )
             c.commit()
         finally:
             c.close()
         return RedirectResponse(target, status_code=303)
+
+    @app.post("/dismiss/{vin}")
+    def dismiss(vin: str, next: str = "/"):
+        """Toggle 'seen it, not interested' (clears any favorite)."""
+        return _toggle_flag(vin, next, "dismissed_at", "favorited_at")
+
+    @app.post("/favorite/{vin}")
+    def favorite(vin: str, next: str = "/"):
+        """Toggle 'looked at it and liked it' (clears any dismissal)."""
+        return _toggle_flag(vin, next, "favorited_at", "dismissed_at")
 
     @app.get("/api/job")
     def job_status():

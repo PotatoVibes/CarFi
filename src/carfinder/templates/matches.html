@@ -34,6 +34,9 @@
   <label class="muted" style="user-select:none">
     <input id="hide-sold" type="checkbox"> hide sold
   </label>
+  <label class="muted" style="user-select:none">
+    <input id="fav-only" type="checkbox"> ♥ only
+  </label>
   <span id="row-count" class="muted"></span>
 </p>
 
@@ -58,7 +61,8 @@
     <tr data-total="{{ r.total }}" data-verdict="{{ r.verdict }}" data-year="{{ r.year or 0 }}"
         data-color="{{ (r.color or '')|lower }}" data-miles="{{ r.miles if r.miles is not none else -1 }}"
         data-price="{{ r.price if r.price is not none else -1 }}" data-bonus="{{ r.highlight_bonus }}"
-        data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}">
+        data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}"
+        data-fav="{{ '1' if r.favorited else '' }}">
       <td class="score">{{ "%.0f"|format(r.total) }}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
@@ -76,10 +80,16 @@
              href="https://www.google.com/search?q={{ r.vin }}" target="_blank" rel="noopener"
              title="search this VIN on Google">{{ r.vin }}</a></td>
       <td><a href="/v/{{ r.vin }}">detail →</a></td>
-      <td>
+      <td style="white-space:nowrap">
         {% set back = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") %}
+        <form method="post" action="/favorite/{{ r.vin }}?next={{ back | urlencode }}"
+              style="margin:0; display:inline"
+              title="{{ 'Unfavorite' if r.favorited else 'Favorite — looked at it and liked it' }}">
+          <button type="submit" class="secondary" style="padding:2px 9px; font-size:12px;
+                  {% if r.favorited %}color:#e08a8a{% endif %}">{{ "♥" if r.favorited else "♡" }}</button>
+        </form>
         <form method="post" action="/dismiss/{{ r.vin }}?next={{ back | urlencode }}"
-              style="margin:0" title="{{ 'Restore' if r.dismissed else 'Dismiss — seen it, not interested' }}">
+              style="margin:0; display:inline" title="{{ 'Restore' if r.dismissed else 'Dismiss — seen it, not interested' }}">
           <button type="submit" class="secondary"
                   style="padding:2px 9px; font-size:12px">{{ "↩" if r.dismissed else "✕" }}</button>
         </form>
@@ -104,6 +114,7 @@
     const q = document.getElementById("q");
     const verdictSel = document.getElementById("verdict-filter");
     const hideSold = document.getElementById("hide-sold");
+    const favOnly = document.getElementById("fav-only");
     const count = document.getElementById("row-count");
 
     function applyFilter() {
@@ -115,6 +126,7 @@
         let ok = !needle || hay.includes(needle);
         if (ok && verdict) ok = tr.dataset.verdict === verdict;
         if (ok && hideSold.checked) ok = tr.dataset.status !== "presumed_sold";
+        if (ok && favOnly.checked) ok = tr.dataset.fav === "1";
         tr.hidden = !ok;
         if (ok) shown++;
       });
@@ -124,6 +136,7 @@
     q.addEventListener("input", applyFilter);
     verdictSel.addEventListener("change", applyFilter);
     hideSold.addEventListener("change", applyFilter);
+    favOnly.addEventListener("change", applyFilter);
     applyFilter();
 
     let sortKey = null, asc = false;

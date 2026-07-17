@@ -152,6 +152,58 @@ def test_dismiss_hides_car_and_restore_brings_it_back(seeded_settings):
     assert BW_VIN in c.get("/m/ct4v_blackwing").text
 
 
+def test_favorite_toggles_and_floats_to_top(seeded_settings):
+    c = _client(seeded_settings)
+    # REVIEW_VIN (needs_review, 100pts) sits below nothing among c8 rows by
+    # default; favorite it and it must carry the fav data attr + red heart.
+    r = c.post(f"/favorite/{REVIEW_VIN}?next=/m/c8_stingray", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/m/c8_stingray"
+    page = c.get("/m/c8_stingray").text
+    assert 'data-fav="1"' in page
+    assert "♥" in page
+    assert 'id="fav-only"' in page  # the ♥-only filter checkbox
+    # Toggle back off.
+    c.post(f"/favorite/{REVIEW_VIN}", follow_redirects=False)
+    assert 'data-fav="1"' not in c.get("/m/c8_stingray").text
+
+
+def test_favorite_and_dismiss_are_mutually_exclusive(seeded_settings):
+    c = _client(seeded_settings)
+    import sqlite3
+
+    def flags():
+        conn = sqlite3.connect(str(seeded_settings.db_path))
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT dismissed_at, favorited_at FROM vehicles WHERE vin=?", (BW_VIN,)
+        ).fetchone()
+        conn.close()
+        return bool(row["dismissed_at"]), bool(row["favorited_at"])
+
+    c.post(f"/favorite/{BW_VIN}", follow_redirects=False)
+    assert flags() == (False, True)
+    c.post(f"/dismiss/{BW_VIN}", follow_redirects=False)  # dismissing clears the heart
+    assert flags() == (True, False)
+    c.post(f"/favorite/{BW_VIN}", follow_redirects=False)  # re-hearting un-dismisses
+    assert flags() == (False, True)
+
+
+def test_favorited_sorts_before_same_verdict(seeded_settings):
+    import sqlite3
+
+    conn = sqlite3.connect(str(seeded_settings.db_path))
+    conn.execute("UPDATE vehicles SET favorited_at='2026-07-16T00:00:00Z' WHERE vin=?", (C8_VIN,))
+    conn.commit()
+    conn.close()
+    from carfinder import store
+    from carfinder.db import bootstrap
+
+    c = bootstrap(seeded_settings.db_path)
+    rows = store.ranked_matches(c, "c8_stingray", include_excluded=True)
+    excluded = [m for m in rows if m.verdict == "excluded"]
+    assert excluded and excluded[0].vin == C8_VIN and excluded[0].favorited
+
+
 def test_dismiss_unknown_vin_404_and_next_sanitized(seeded_settings):
     c = _client(seeded_settings)
     assert c.post("/dismiss/NOPE", follow_redirects=False).status_code == 404

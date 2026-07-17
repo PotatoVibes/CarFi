@@ -197,6 +197,14 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE vehicles ADD COLUMN dismissed_at TEXT;
         """,
     ),
+    (
+        9,
+        """
+        -- Favorites ("looked at it and liked it"): same user-flag semantics
+        -- as dismissed_at; mutually exclusive with it in the UI layer.
+        ALTER TABLE vehicles ADD COLUMN favorited_at TEXT;
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

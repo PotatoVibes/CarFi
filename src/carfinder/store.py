@@ -34,6 +34,7 @@ class MatchRow:
     first_seen: str
     is_new: bool = False
     dismissed: bool = False
+    favorited: bool = False
 
 
 def ranked_matches(
@@ -50,7 +51,8 @@ def ranked_matches(
         """
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
-               v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at
+               v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at,
+               v.favorited_at
         FROM match_results m
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
@@ -79,6 +81,7 @@ def ranked_matches(
             first_seen=r["first_seen"],
             is_new=bool(since and r["first_seen"] and r["first_seen"] > since),
             dismissed=bool(r["dismissed_at"]),
+            favorited=bool(r["favorited_at"]),
         )
         for r in rows
     ]
@@ -86,7 +89,10 @@ def ranked_matches(
         matches = [m for m in matches if m.verdict != "excluded"]
     if not include_dismissed:
         matches = [m for m in matches if not m.dismissed]
-    matches.sort(key=lambda m: (m.dismissed, _VERDICT_RANK.get(m.verdict, 9), -m.total))
+    # Favorites float to the top of their verdict group; dismissed sink last.
+    matches.sort(
+        key=lambda m: (m.dismissed, _VERDICT_RANK.get(m.verdict, 9), not m.favorited, -m.total)
+    )
     return matches
 
 

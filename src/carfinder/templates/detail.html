@@ -2,9 +2,15 @@
 {% set v = d.vehicle %}
 {% block title %}{{ v.vin }} — Car Finder{% endblock %}
 {% block content %}
-<p style="display:flex; align-items:center; gap:14px">
+<p style="display:flex; align-items:center; gap:10px">
   <a href="/m/{{ v.model_key }}">← back to matches</a>
-  <form method="post" action="/dismiss/{{ v.vin }}?next=/v/{{ v.vin }}" style="margin-left:auto">
+  <form method="post" action="/favorite/{{ v.vin }}?next=/v/{{ v.vin }}" style="margin-left:auto">
+    <button type="submit" class="secondary"
+            {% if v.get("favorited_at") %}style="color:#e08a8a"{% endif %}>
+      {{ "♥ Favorited" if v.get("favorited_at") else "♡ Favorite" }}
+    </button>
+  </form>
+  <form method="post" action="/dismiss/{{ v.vin }}?next=/v/{{ v.vin }}">
     <button type="submit" class="secondary">
       {{ "↩ Restore" if v.get("dismissed_at") else "✕ Dismiss — not interested" }}
     </button>
