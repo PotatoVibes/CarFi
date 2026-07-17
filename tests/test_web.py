@@ -127,6 +127,26 @@ def test_detail_without_location_says_unknown(seeded_settings):
     assert "unknown (private sale or unlisted dealer)" in r
 
 
+def test_matches_color_uses_scorer_resolved_family(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert "Black Raven" in r  # paint name, title-cased from match_results
+    assert "scored as black" in r  # family tooltip matches the detail page
+    # A row never (re)scored with the new columns falls back to listing text.
+    r2 = _client(seeded_settings).get("/m/c8_stingray").text
+    assert "Rapid Blue" in r2
+
+
+def test_detail_and_matches_chip_agree(seeded_settings):
+    from carfinder.colors import FAMILY_HEX
+
+    matches = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    detail = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    # Both pages color the chip from the resolved family (black), even though
+    # a listing feed could claim something else.
+    assert FAMILY_HEX["black"] in matches
+    assert FAMILY_HEX["black"] in detail
+
+
 def test_matches_rows_show_location_and_distance(seeded_settings):
     r = _client(seeded_settings).get("/m/ct4v_blackwing").text
     assert 'data-key="dist"' in r  # sortable Location column

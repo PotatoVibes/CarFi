@@ -70,7 +70,8 @@
   <tbody>
   {% for r in rows %}
     <tr data-total="{{ r.total }}" data-verdict="{{ r.verdict }}" data-year="{{ r.year or 0 }}"
-        data-color="{{ (r.color or '')|lower }}" data-miles="{{ r.miles if r.miles is not none else -1 }}"
+        data-color="{{ (r.color_family or '')|lower }} {{ (r.color_display or '')|lower }}"
+        data-miles="{{ r.miles if r.miles is not none else -1 }}"
         data-price="{{ r.price if r.price is not none else -1 }}" data-bonus="{{ r.highlight_bonus }}"
         data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}"
         data-fav="{{ '1' if r.favorited else '' }}"
@@ -81,8 +82,9 @@
           {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}
           {% if r.dismissed %}<span class="badge unknown">dismissed</span>{% endif %}</td>
       <td>{{ r.year or "?" }}</td>
-      <td><span class="chip" style="background: {{ chip_hex(model_key, None, r.color) }}"></span>
-          {{ r.color or "—" }}</td>
+      <td><span class="chip" style="background: {{ resolved_chip_hex(r.color_family, model_key, r.color) }}"></span>
+          <span {% if r.color_family %}title="scored as {{ r.color_family }}"{% endif %}>
+            {{ r.color_display or "—" }}</span></td>
       <td>{{ "{:,}".format(r.miles) if r.miles is not none else "?" }}</td>
       <td>{{ "${:,.0f}".format(r.price) if r.price is not none else "?" }}</td>
       <td class="muted">{% if r.highlight_bonus %}+{{ "%.0f"|format(r.highlight_bonus) }}{% endif %}</td>

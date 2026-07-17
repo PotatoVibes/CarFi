@@ -277,6 +277,10 @@ class RequirementResult(BaseModel):
     dim_score: float | None = None  # 0–100, soft only
     weight: float | None = None
     bonus: float | None = None  # highlight contribution actually applied
+    # Set on the color soft dimension only: the resolved family + the actual
+    # paint name, so the UI shows one consistent color everywhere.
+    color_family: str | None = None
+    paint_name: str | None = None
 
 
 class ScoreResult(BaseModel):

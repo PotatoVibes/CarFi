@@ -201,6 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "show_excluded": show_excluded,
                 "show_dismissed": show_dismissed,
                 "chip_hex": colors.chip_hex,
+                "resolved_chip_hex": colors.resolved_chip_hex,
             },
         )
         resp.set_cookie(cookie_key, _now_iso(), max_age=60 * 60 * 24 * 365)
@@ -222,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "d": det,
                 "chip_hex": colors.chip_hex,
+                "resolved_chip_hex": colors.resolved_chip_hex,
                 "sticker_pdf": sticker_pdf,
                 "home_zip": settings.home_zip,
                 "has_autodev_key": bool(settings.autodev_api_key),

@@ -40,12 +40,22 @@ class MatchRow:
     city: str | None = None
     state: str | None = None
     distance_mi: int | None = None  # from the configured home zip
+    color_family: str | None = None  # scorer-resolved (match_results)
+    paint_name: str | None = None
 
     @property
     def location(self) -> str | None:
         if self.city and self.state:
             return f"{self.city}, {self.state}"
         return self.state or None
+
+    @property
+    def color_display(self) -> str | None:
+        """What the Color column shows: the actual paint name when the scorer
+        resolved one, else the resolved family, else the listing's text."""
+        if self.paint_name:
+            return self.paint_name.title()
+        return self.color_family or self.color
 
 
 def ranked_matches(
@@ -65,7 +75,7 @@ def ranked_matches(
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
                v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at,
-               v.favorited_at, v.city, v.state, v.zip
+               v.favorited_at, v.city, v.state, v.zip, m.color_family, m.paint_name
         FROM match_results m
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
@@ -98,6 +108,8 @@ def ranked_matches(
             city=r["city"],
             state=r["state"],
             distance_mi=geo.zip_distance_miles(home_zip, r["zip"]) if home_zip else None,
+            color_family=r["color_family"],
+            paint_name=r["paint_name"],
         )
         for r in rows
     ]

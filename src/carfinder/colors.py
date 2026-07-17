@@ -137,6 +137,14 @@ def chip_hex(model_key: str, paint_rpo: str | None, color_text: str | None) -> s
     return FAMILY_HEX.get(fam.value if fam else "other", FAMILY_HEX["other"])
 
 
+def resolved_chip_hex(family: str | None, model_key: str, color_text: str | None) -> str:
+    """Swatch hex preferring the scorer-resolved family (match_results), falling
+    back to classifying the listing text for rows not yet (re)scored."""
+    if family and family in FAMILY_HEX:
+        return FAMILY_HEX[family]
+    return chip_hex(model_key, None, color_text)
+
+
 def paint_codes(model_key: str) -> set[str]:
     """All known paint RPO codes for a model (for options-list intersection)."""
     return set(_PAINT_TABLES.get(model_key, {}))

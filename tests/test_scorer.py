@@ -183,6 +183,9 @@ def test_rift_metallic_classifies_as_white():
     c = next(s for s in r.soft if s.key == "color")
     assert c.dim_score == pytest.approx(0.0)
     assert c.detail == "white (Rift Metallic) -> 0"
+    # Structured fields ride along so list pages render the same color.
+    assert c.color_family == "white"
+    assert c.paint_name == "Rift Metallic"
 
 
 # --- hard gate: verified beats claimed -------------------------------------

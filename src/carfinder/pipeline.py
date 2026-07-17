@@ -551,16 +551,20 @@ class Pipeline:
             "soft": [r.model_dump(mode="json") for r in result.soft],
             "highlights": [r.model_dump(mode="json") for r in result.highlights],
         }
+        # The scorer's resolved color, denormalized so lists render the same
+        # color the detail page explains (listing text can disagree).
+        color = next((s for s in result.soft if s.color_family), None)
         self._conn.execute(
             """INSERT INTO match_results
                (vin, model_key, verdict, soft_score, highlight_bonus, total,
-                breakdown_json, scored_at)
-               VALUES (?,?,?,?,?,?,?,?)
+                breakdown_json, scored_at, color_family, paint_name)
+               VALUES (?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(vin) DO UPDATE SET
                  model_key=excluded.model_key, verdict=excluded.verdict,
                  soft_score=excluded.soft_score, highlight_bonus=excluded.highlight_bonus,
                  total=excluded.total, breakdown_json=excluded.breakdown_json,
-                 scored_at=excluded.scored_at""",
+                 scored_at=excluded.scored_at, color_family=excluded.color_family,
+                 paint_name=excluded.paint_name""",
             (
                 vin,
                 model_key,
@@ -570,6 +574,8 @@ class Pipeline:
                 result.total,
                 json.dumps(breakdown, separators=(",", ":")),
                 self._now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                color.color_family if color else None,
+                color.paint_name if color else None,
             ),
         )
         if not self._defer_commits:

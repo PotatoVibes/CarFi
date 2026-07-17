@@ -224,6 +224,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        11,
+        """
+        -- The color the SCORER resolved (family + actual paint name), written
+        -- at scoring time so match lists and the detail page always show the
+        -- same color — the listing's claimed text can disagree (e.g. a feed
+        -- calling Rift Metallic "Silver"). NULL until the next (re)score.
+        ALTER TABLE match_results ADD COLUMN color_family TEXT;
+        ALTER TABLE match_results ADD COLUMN paint_name TEXT;
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

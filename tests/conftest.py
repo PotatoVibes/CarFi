@@ -149,6 +149,12 @@ def seeded_settings(tmp_path) -> Settings:
         price=61000,
         first_seen="2026-07-20T00:00:00Z",
     )
+    # Scorer-resolved color on the ranked car: the listing text ("Black Raven")
+    # stays on vehicles.color; the resolved family+paint live on match_results.
+    conn.execute(
+        "UPDATE match_results SET color_family='black', paint_name='BLACK RAVEN' WHERE vin=?",
+        (BW_VIN,),
+    )
     # Seller + location on the ranked car (Austin is ~130 mi from 77498).
     conn.execute(
         "UPDATE vehicles SET dealer='Example Motors of Austin', city='Austin', "

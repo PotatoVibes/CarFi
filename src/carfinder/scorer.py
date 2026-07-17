@@ -180,7 +180,7 @@ def _evaluate_soft(c: SoftConstraint, vehicle: Vehicle, model_key: str) -> _Soft
     return _evaluate_color(c, vehicle, model_key)
 
 
-def _soft_result(c, status, prov, detail, dim_score) -> RequirementResult:
+def _soft_result(c, status, prov, detail, dim_score, **extra) -> RequirementResult:
     return RequirementResult(
         key=c.key,
         label=c.label,
@@ -190,6 +190,7 @@ def _soft_result(c, status, prov, detail, dim_score) -> RequirementResult:
         detail=detail,
         dim_score=dim_score,
         weight=c.weight,
+        **extra,
     )
 
 
@@ -230,10 +231,23 @@ def _evaluate_color(c: SoftConstraint, vehicle: Vehicle, model_key: str) -> _Sof
     else:
         score = c.neutral_score
     # Show the actual paint name next to the family when it adds information:
-    # "white (Rift Metallic) -> 0", but never "white (White) -> 100".
+    # "white (Rift Metallic) -> 0", but never "white (White) -> 100". The
+    # resolved family + paint name also ride along as structured fields so
+    # every page renders the same color this scorer used.
     paint = (vehicle.color_text or "").strip()
     label = f"{name} ({paint.title()})" if paint and paint.lower() != name else name
-    return _SoftEval(_soft_result(c, "scored", prov, f"{label} -> {score:.0f}", score), False)
+    return _SoftEval(
+        _soft_result(
+            c,
+            "scored",
+            prov,
+            f"{label} -> {score:.0f}",
+            score,
+            color_family=name,
+            paint_name=paint or None,
+        ),
+        False,
+    )
 
 
 # --- Highlights ------------------------------------------------------------

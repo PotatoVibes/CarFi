@@ -95,6 +95,10 @@ def test_blackwing_verified_ranked():
     # Breakdown persisted and parseable; every hard req verified-passed.
     bd = json.loads(m["breakdown_json"])
     assert all(h["provenance"] == "verified" and h["status"] == "pass" for h in bd["hard"])
+    # Scorer-resolved color denormalized for the list pages (sticker says
+    # BLACK RAVEN -> family black).
+    assert m["color_family"] == "black"
+    assert "RAVEN" in m["paint_name"].upper()
 
 
 def test_c8_verified_excluded_on_magneride():

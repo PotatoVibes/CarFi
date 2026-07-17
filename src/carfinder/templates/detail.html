@@ -25,7 +25,7 @@
   notifications. Restore above to bring it back.</p>
 {% endif %}
 <h1>
-  <span class="chip" style="background: {{ chip_hex(v.model_key, v.get('paint_rpo'), v.color) }}"></span>
+  <span class="chip" style="background: {{ resolved_chip_hex(d.match.color_family if d.match else None, v.model_key, v.color) }}"></span>
   {{ v.year or "" }} {{ v.make or "" }} {{ v.model or "" }} {{ v.trim or "" }}
 </h1>
 <p class="muted">VIN <a href="https://www.google.com/search?q={{ v.vin }}" target="_blank"
