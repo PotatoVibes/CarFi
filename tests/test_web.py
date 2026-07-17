@@ -103,6 +103,11 @@ def test_detail_links_to_dealer_listing(seeded_settings):
     assert "https://dealer.example/bw-listing" in r.text
 
 
+def test_detail_vin_links_to_google_search(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}")
+    assert f"https://www.google.com/search?q={BW_VIN}" in r.text
+
+
 def test_sync_now_without_key_flashes(seeded_settings):
     r = _client(seeded_settings).post("/sync", follow_redirects=False)
     assert r.status_code == 303

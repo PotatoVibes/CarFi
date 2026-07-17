@@ -18,7 +18,8 @@
   <span class="chip" style="background: {{ chip_hex(v.model_key, v.get('paint_rpo'), v.color) }}"></span>
   {{ v.year or "" }} {{ v.make or "" }} {{ v.model or "" }} {{ v.trim or "" }}
 </h1>
-<p class="muted">VIN {{ v.vin }} · {{ v.status }}</p>
+<p class="muted">VIN <a href="https://www.google.com/search?q={{ v.vin }}" target="_blank"
+     rel="noopener" title="search this VIN on Google">{{ v.vin }}</a> · {{ v.status }}</p>
 
 {% if d.match %}
 <p>
