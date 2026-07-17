@@ -10,6 +10,14 @@
   {% else %}
     <a href="/m/{{ model_key }}?show_excluded=true">show {{ counts.excluded }} excluded</a>
   {% endif %}
+  {% if counts.dismissed %}
+    ·
+    {% if show_dismissed %}
+      <a href="/m/{{ model_key }}">hide dismissed</a>
+    {% else %}
+      <a href="/m/{{ model_key }}?show_dismissed=true">show {{ counts.dismissed }} dismissed</a>
+    {% endif %}
+  {% endif %}
 </p>
 
 <p style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
@@ -41,6 +49,7 @@
       <th data-key="bonus" data-num>Bonus</th>
       <th data-key="sticker">Sticker</th>
       <th></th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -52,7 +61,8 @@
       <td class="score">{{ "%.0f"|format(r.total) }}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
-          {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}</td>
+          {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}
+          {% if r.dismissed %}<span class="badge unknown">dismissed</span>{% endif %}</td>
       <td>{{ r.year or "?" }}</td>
       <td><span class="chip" style="background: {{ chip_hex(model_key, None, r.color) }}"></span>
           {{ r.color or "—" }}</td>
@@ -62,9 +72,17 @@
       <td>{% if r.sticker_status == "found" %}<span class="badge verified">✓</span>
           {% else %}<span class="muted">{{ r.sticker_status or "—" }}</span>{% endif %}</td>
       <td><a href="/v/{{ r.vin }}">detail →</a></td>
+      <td>
+        {% set back = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") %}
+        <form method="post" action="/dismiss/{{ r.vin }}?next={{ back | urlencode }}"
+              style="margin:0" title="{{ 'Restore' if r.dismissed else 'Dismiss — seen it, not interested' }}">
+          <button type="submit" class="secondary"
+                  style="padding:2px 9px; font-size:12px">{{ "↩" if r.dismissed else "✕" }}</button>
+        </form>
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="9" class="muted">No matches yet.</td></tr>
+    <tr><td colspan="10" class="muted">No matches yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

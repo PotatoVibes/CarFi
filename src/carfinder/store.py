@@ -33,6 +33,7 @@ class MatchRow:
     sticker_status: str | None
     first_seen: str
     is_new: bool = False
+    dismissed: bool = False
 
 
 def ranked_matches(
@@ -40,14 +41,16 @@ def ranked_matches(
     model_key: str,
     include_excluded: bool = False,
     since: str | None = None,
+    include_dismissed: bool = False,
 ) -> list[MatchRow]:
-    """Ranked matches for a model. Excluded cars hidden unless requested.
-    Rows with first_seen > `since` are flagged is_new (for 'new since visit')."""
+    """Ranked matches for a model. Excluded and manually-dismissed cars are
+    hidden unless requested. Rows with first_seen > `since` are flagged is_new
+    (for 'new since visit')."""
     rows = conn.execute(
         """
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
-               v.status, s.status AS sticker_status, v.first_seen
+               v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at
         FROM match_results m
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
@@ -75,12 +78,15 @@ def ranked_matches(
             sticker_status=r["sticker_status"],
             first_seen=r["first_seen"],
             is_new=bool(since and r["first_seen"] and r["first_seen"] > since),
+            dismissed=bool(r["dismissed_at"]),
         )
         for r in rows
     ]
     if not include_excluded:
         matches = [m for m in matches if m.verdict != "excluded"]
-    matches.sort(key=lambda m: (_VERDICT_RANK.get(m.verdict, 9), -m.total))
+    if not include_dismissed:
+        matches = [m for m in matches if not m.dismissed]
+    matches.sort(key=lambda m: (m.dismissed, _VERDICT_RANK.get(m.verdict, 9), -m.total))
     return matches
 
 
@@ -161,14 +167,23 @@ def all_conflicts(conn: sqlite3.Connection, include_excluded: bool = False) -> l
 
 
 def match_counts(conn: sqlite3.Connection, model_key: str) -> dict[str, int]:
-    """Count of each verdict for a model (for header badges)."""
+    """Count of each verdict for a model (for header badges). Manually
+    dismissed cars are counted separately — they're handled, not pending."""
     rows = conn.execute(
-        "SELECT verdict, COUNT(*) AS n FROM match_results WHERE model_key = ? GROUP BY verdict",
+        """SELECT m.verdict, COUNT(*) AS n FROM match_results m
+           JOIN vehicles v ON v.vin = m.vin
+           WHERE m.model_key = ? AND v.dismissed_at IS NULL
+           GROUP BY m.verdict""",
         (model_key,),
     ).fetchall()
     counts = {"ranked": 0, "needs_review": 0, "excluded": 0}
     for r in rows:
         counts[r["verdict"]] = r["n"]
+    counts["dismissed"] = conn.execute(
+        """SELECT COUNT(*) FROM match_results m JOIN vehicles v ON v.vin = m.vin
+           WHERE m.model_key = ? AND v.dismissed_at IS NOT NULL""",
+        (model_key,),
+    ).fetchone()[0]
     return counts
 
 

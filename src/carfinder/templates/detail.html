@@ -2,7 +2,18 @@
 {% set v = d.vehicle %}
 {% block title %}{{ v.vin }} — Car Finder{% endblock %}
 {% block content %}
-<p><a href="/m/{{ v.model_key }}">← back to matches</a></p>
+<p style="display:flex; align-items:center; gap:14px">
+  <a href="/m/{{ v.model_key }}">← back to matches</a>
+  <form method="post" action="/dismiss/{{ v.vin }}?next=/v/{{ v.vin }}" style="margin-left:auto">
+    <button type="submit" class="secondary">
+      {{ "↩ Restore" if v.get("dismissed_at") else "✕ Dismiss — not interested" }}
+    </button>
+  </form>
+</p>
+{% if v.get("dismissed_at") %}
+<p class="flash">Dismissed {{ v.dismissed_at[:10] }} — hidden from match lists and
+  notifications. Restore above to bring it back.</p>
+{% endif %}
 <h1>
   <span class="chip" style="background: {{ chip_hex(v.model_key, v.get('paint_rpo'), v.color) }}"></span>
   {{ v.year or "" }} {{ v.make or "" }} {{ v.model or "" }} {{ v.trim or "" }}

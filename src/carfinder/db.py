@@ -188,6 +188,15 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        8,
+        """
+        -- Manual dismissal ("seen it, not interested"): a user flag, not a
+        -- verdict — scoring stays provenance-pure and syncs/rescores never
+        -- touch it. NULL = not dismissed.
+        ALTER TABLE vehicles ADD COLUMN dismissed_at TEXT;
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

@@ -118,6 +118,37 @@ def test_full_sync_without_key_flashes(seeded_settings):
     assert "flash=" in r.headers["location"]
 
 
+def test_dismiss_hides_car_and_restore_brings_it_back(seeded_settings):
+    c = _client(seeded_settings)
+    assert BW_VIN in c.get("/m/ct4v_blackwing").text
+    # Dismiss: redirects back to the given page; car vanishes from the list.
+    r = c.post(f"/dismiss/{BW_VIN}?next=/m/ct4v_blackwing", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/m/ct4v_blackwing"
+    page = c.get("/m/ct4v_blackwing").text
+    assert BW_VIN not in page
+    assert "show 1 dismissed" in page
+    # Counts on the index no longer include it as ranked.
+    assert "0 ranked" in c.get("/").text
+    # Visible again via the toggle, flagged.
+    shown = c.get("/m/ct4v_blackwing?show_dismissed=true").text
+    assert BW_VIN in shown and "dismissed" in shown
+    # Detail page shows the banner + restore.
+    det = c.get(f"/v/{BW_VIN}").text
+    assert "Restore" in det and "Dismissed" in det
+    # Toggle back: car returns to the list.
+    c.post(f"/dismiss/{BW_VIN}", follow_redirects=False)
+    assert BW_VIN in c.get("/m/ct4v_blackwing").text
+
+
+def test_dismiss_unknown_vin_404_and_next_sanitized(seeded_settings):
+    c = _client(seeded_settings)
+    assert c.post("/dismiss/NOPE", follow_redirects=False).status_code == 404
+    # An absolute/protocol-relative next must not become an open redirect.
+    r = c.post(f"/dismiss/{BW_VIN}?next=//evil.example", follow_redirects=False)
+    assert r.headers["location"] == "/"
+
+
 def test_sync_summary_flags_truncation():
     from carfinder.pipeline import PipelineStats
     from carfinder.sync import SyncStats

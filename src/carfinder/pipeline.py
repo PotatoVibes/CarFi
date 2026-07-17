@@ -354,6 +354,11 @@ class Pipeline:
         qualifies = result.verdict == "ranked" and result.total >= self._notify_threshold
         if not qualifies:
             return False
+        dismissed = self._conn.execute(
+            "SELECT dismissed_at FROM vehicles WHERE vin=?", (vin,)
+        ).fetchone()
+        if dismissed and dismissed["dismissed_at"]:
+            return False  # user said "not interested" — don't ping about it
         was = (
             prior is not None
             and prior["verdict"] == "ranked"

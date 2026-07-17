@@ -31,7 +31,14 @@ def test_ranked_matches_new_flag(seeded_settings):
 def test_match_counts(seeded_settings):
     conn = _conn(seeded_settings)
     counts = store.match_counts(conn, "c8_stingray")
-    assert counts == {"ranked": 0, "needs_review": 1, "excluded": 1}
+    assert counts == {"ranked": 0, "needs_review": 1, "excluded": 1, "dismissed": 0}
+    # Dismissing a car moves it out of its verdict bucket into 'dismissed'.
+    conn.execute(
+        "UPDATE vehicles SET dismissed_at='2026-07-16T00:00:00Z' WHERE vin=?", (REVIEW_VIN,)
+    )
+    conn.commit()
+    counts = store.match_counts(conn, "c8_stingray")
+    assert counts == {"ranked": 0, "needs_review": 0, "excluded": 1, "dismissed": 1}
 
 
 def test_vehicle_detail_assembles_everything(seeded_settings):

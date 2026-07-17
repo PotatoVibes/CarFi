@@ -155,13 +155,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             c.close()
 
     @app.get("/m/{model_key}", response_class=HTMLResponse)
-    def matches(request: Request, model_key: str, show_excluded: bool = False):
+    def matches(
+        request: Request,
+        model_key: str,
+        show_excluded: bool = False,
+        show_dismissed: bool = False,
+    ):
         profile = app.state.profiles_by_key.get(model_key)
         cookie_key = f"seen_{model_key}"
         since = request.cookies.get(cookie_key)
         c = conn()
         try:
-            rows = store.ranked_matches(c, model_key, include_excluded=show_excluded, since=since)
+            rows = store.ranked_matches(
+                c,
+                model_key,
+                include_excluded=show_excluded,
+                since=since,
+                include_dismissed=show_dismissed,
+            )
             counts = store.match_counts(c, model_key)
         finally:
             c.close()
@@ -174,6 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "rows": rows,
                 "counts": counts,
                 "show_excluded": show_excluded,
+                "show_dismissed": show_dismissed,
                 "chip_hex": colors.chip_hex,
             },
         )
@@ -234,6 +246,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if row and row["path"] and Path(row["path"]).exists():
             return FileResponse(row["path"], media_type="application/pdf")
         return Response("No sticker on file", status_code=404)
+
+    @app.post("/dismiss/{vin}")
+    def dismiss(vin: str, next: str = "/"):
+        """Toggle manual dismissal ('seen it, not interested') for a car."""
+        # Only same-site relative redirects (no open-redirect via next=).
+        target = next if next.startswith("/") and not next.startswith("//") else "/"
+        c = conn()
+        try:
+            row = c.execute("SELECT dismissed_at FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+            if row is None:
+                return HTMLResponse("Unknown VIN", status_code=404)
+            if row["dismissed_at"]:
+                c.execute("UPDATE vehicles SET dismissed_at = NULL WHERE vin = ?", (vin,))
+            else:
+                c.execute("UPDATE vehicles SET dismissed_at = ? WHERE vin = ?", (_now_iso(), vin))
+            c.commit()
+        finally:
+            c.close()
+        return RedirectResponse(target, status_code=303)
 
     @app.get("/api/job")
     def job_status():

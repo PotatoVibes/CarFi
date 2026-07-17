@@ -675,6 +675,50 @@ def test_buildsheet_fallback_ranks_manual_blackwing_without_sticker():
     assert vented["status"] == "pass" and vented["provenance"] == "verified"
 
 
+def test_dismissed_car_never_notifies():
+    """A qualifying car the user dismissed must not ping the webhook."""
+
+    class SpyNotifier:
+        enabled = True
+
+        def __init__(self):
+            self.sent = []
+
+        def notify_match(self, vin, title, body):
+            self.sent.append(vin)
+            return True
+
+    rows = [
+        ListingRow(
+            vin=BW_VIN,
+            source="autodev",
+            price=58000,
+            miles=30000,
+            year=2022,
+            make="Cadillac",
+            model="CT4-V",
+            trim="V-Series Blackwing",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    spy = SpyNotifier()
+    pipe._notifier = spy
+    pipe._notify_threshold = 50.0
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+    assert spy.sent == [BW_VIN]  # ranked above threshold -> notified once
+
+    # User dismisses it; a price change re-processes the car -> no re-ping.
+    conn.execute("UPDATE vehicles SET dismissed_at='2026-07-16T00:00:00Z' WHERE vin=?", (BW_VIN,))
+    conn.execute("DELETE FROM match_results WHERE vin=?", (BW_VIN,))  # forces 'newly ranked'
+    conn.commit()
+    pipe._engine._source.rows = [
+        ListingRow(vin=BW_VIN, source="autodev", price=55000, miles=30000, year=2022)
+    ]
+    pipe.run(bw, run_id="r2")
+    assert spy.sent == [BW_VIN]  # still just the one ping
+
+
 def test_sticker_cap_scores_on_listing_only():
     # 3LT convertible pattern so the VIN gate passes (a VIN-failed car would
     # be fast-path excluded before the cap is ever consulted).
