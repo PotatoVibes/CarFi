@@ -69,12 +69,15 @@ def test_full_pipeline_scores_blackwing(bw):
     assert {
         "Power sunroof",
         "Performance Data Recorder",
-        "Sueded microfiber package",
         "Massaging seats",
         "Painted calipers",  # BRAKE CALIPERS, RED — regex fixed in M2 pass
     } <= badges
     # This car has no carbon fiber packages — must not badge them.
     assert "Carbon Fiber Package 1" not in badges
+    # And NOT the sueded package: its build sheet shows a LEATHER steering
+    # wheel (NK4); the old badge here was the standard-shift-knob text
+    # overfiring ("SUEDED MICROFIBER WRAPPED..." prints on every BW sticker).
+    assert "Sueded microfiber package" not in badges
 
 
 # --- C8 fixture: 2023 Stingray 3LT Z51 convertible, Black, NO MagneRide -----

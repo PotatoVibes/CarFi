@@ -1,177 +1,238 @@
+# Managed by the Car Finder config UI (edits regenerate this file;
+# the previous version is kept alongside as .bak).
 name: C8 Corvette Stingray
 model_key: c8_stingray
-
-# Server-side prefilter (Auto.dev). Deliberately wider than the hard bounds;
-# the scorer makes the final call. year_max defaults to current year + 1 and
-# price ceiling widens the $70k hard bound by price_margin.
 query:
   make: Chevrolet
   model: Corvette
+  trim: null
+  year_min: null
+  year_max: null
+  price_max: null
   price_margin: 0.08
-
-# --- Hard requirements (verified-only pass/fail) --------------------------
-# Every matcher carries a sticker-text regex as the drift-proof safety net;
-# RPO codes (where given) are the precise signal, corrected in M2.
 hard:
-  # vin_attr matchers decode identity straight from the VIN (verified, zero
-  # API calls): trim series in pos 5, body in pos 6, engine in pos 8 — all
-  # corpus-verified in src/carfinder/vin.py. Z51 and MagneRide are options,
-  # NOT in the VIN, so those still need the window sticker.
-  - key: model_stingray
-    label: Corvette Stingray
-    kind: require
-    matcher:
-      vin_attr: model
-      vin_any: [STINGRAY]
-      sticker_text: "STINGRAY"
-
-  - key: not_z06_eray
-    label: Not Z06 / E-Ray
-    kind: forbid
-    matcher:
-      # A VIN-decoded STINGRAY fact is a verified "not Z06/E-Ray".
-      vin_attr: model
-      vin_any: [Z06, ERAY]
-      sticker_text: "Z06|E-RAY|E RAY|ERAY"
-
-  - key: year_2021_plus
-    label: 2021 or newer
-    kind: year_min
-    min_year: 2021
-
-  - key: convertible
-    label: Convertible (hardtop)
-    kind: require
-    matcher:
-      vin_attr: body    # VIN pos 6: 2=coupe, 3=convertible (corpus-verified)
-      vin_any: [CONVERTIBLE]
-      # VERIFIED against 1G1YC3D47P5121316: stickers print "STINGRAY CONV"
-      # (never the full word) plus the retractable-hardtop line. The original
-      # "CONVERTIBLE"-only pattern would have verified-FAILED every convertible.
-      # \b after CONV keeps "CONVENIENCE PACKAGE" from matching.
-      sticker_text: "CONVERTIBLE|CONV\\b|HARD TOP W/REMOTE"
-
-  - key: trim_2lt_3lt
-    label: 2LT or 3LT
-    kind: require
-    matcher:
-      vin_attr: trim    # VIN pos 5: A=1LT, B=2LT, C=3LT (corpus-verified)
-      vin_any: [2LT, 3LT]
-      rpo: [2LT, 3LT]   # VERIFIED: trim code rides in the factory options list
-      sticker_text: "2LT|3LT"
-
-  - key: z51
-    label: Z51 Performance Package
-    kind: require
-    matcher:
-      rpo: Z51          # VERIFIED on 1G1YC3D47P5121316
-      sticker_text: "Z51"
-
-  - key: magneride
-    label: Magnetic Ride Control
-    kind: require
-    matcher:
-      # DISPROVEN 2026-07-16: FE4 is NOT MagneRide. Build-sheet cross-check
-      # (gmpartsgiant) showed FE4 = "SUSPENSION SYSTEM SPECIAL RIDE &
-      # HANDLING" on cars whose complete stickers print no magnetic line —
-      # 13 of 31 ranked cars were FE4 false positives. The printed sticker
-      # line ("MAGNETIC SELECTIVE RIDE...") is the only reliable C8 signal.
-      # F55 is the true MagneRide RPO where GM data carries it (seen on
-      # Cadillac build sheets: "MAGNETO RHEOLOGICAL" damping).
-      rpo: F55
-      sticker_text: "MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE|MAGNETO RHEOLOGICAL"
-
-# --- Soft requirements (weighted penalty curves) --------------------------
+- key: model_stingray
+  label: Corvette Stingray
+  kind: require
+  matcher:
+    vin_attr: model
+    vin_any:
+    - STINGRAY
+    rpo: []
+    sticker_text: STINGRAY
+  min_year: null
+- key: not_z06_eray
+  label: Not Z06 / E-Ray
+  kind: forbid
+  matcher:
+    vin_attr: model
+    vin_any:
+    - Z06
+    - ERAY
+    rpo: []
+    sticker_text: Z06|E-RAY|E RAY|ERAY
+  min_year: null
+- key: year_2021_plus
+  label: 2021 or newer
+  kind: year_min
+  matcher: null
+  min_year: 2021
+- key: convertible
+  label: Convertible (hardtop)
+  kind: require
+  matcher:
+    vin_attr: body
+    vin_any:
+    - CONVERTIBLE
+    rpo: []
+    sticker_text: CONVERTIBLE|CONV\b|HARD TOP W/REMOTE
+  min_year: null
+- key: trim_2lt_3lt
+  label: 2LT or 3LT
+  kind: require
+  matcher:
+    vin_attr: trim
+    vin_any:
+    - 2LT
+    - 3LT
+    rpo:
+    - 2LT
+    - 3LT
+    sticker_text: 2LT|3LT
+  min_year: null
+- key: z51
+  label: Z51 Performance Package
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - Z51
+    sticker_text: Z51
+  min_year: null
+- key: magneride
+  label: Magnetic Ride Control
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - F55
+    sticker_text: MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE|MAGNETO RHEOLOGICAL
+  min_year: null
 soft:
-  - key: miles
-    label: Mileage
-    kind: numeric
-    attr: miles
-    ideal: 50000
-    hard: 60000
-    direction: lower_better
-    weight: 0.20
-
-  - key: price
-    label: Price
-    kind: numeric
-    attr: price
-    ideal: 63000
-    hard: 70000
-    direction: lower_better
-    weight: 0.25
-
-  - key: color
-    label: Color
-    kind: color
-    weight: 0.10
-    preferred: [blue]
-    penalized: [black, white, red]
-
-# --- Highlights (bonus badges; total capped at +10 by the scorer) ---------
+- key: miles
+  label: Mileage
+  kind: numeric
+  weight: 0.2
+  attr: miles
+  ideal: 50000.0
+  hard: 60000.0
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: price
+  label: Price
+  kind: numeric
+  weight: 0.25
+  attr: price
+  ideal: 63000.0
+  hard: 70000.0
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: color
+  label: Color
+  kind: color
+  weight: 0.1
+  attr: null
+  ideal: null
+  hard: null
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred:
+  - blue
+  - yellow
+  - green
+  penalized:
+  - red
+  - white
+  - black
+  neutral_score: 50.0
 highlights:
-  # Genuinely valuable
-  - label: Front lift w/ memory
-    bonus: 8
-    matcher:
-      rpo: E60
-      sticker_text: "FRONT LIFT"
-  - label: Performance Data Recorder
-    bonus: 3
-    matcher:
-      rpo: UQT          # VERIFIED on 1G1YC3D47P5121316 (C8) and the BW fixture
-      sticker_text: "PERFORMANCE DATA"
-  - label: Competition Sport seats
-    bonus: 5
-    matcher:
-      sticker_text: "COMPETITION SPORT.*SEAT|COMPETITION SEAT"   # VERIFY code (likely AE4-family)
-  - label: Performance exhaust
-    bonus: 4
-    matcher:
-      rpo: NPP
-      sticker_text: "PERFORMANCE EXHAUST"
-  - label: Visible carbon fiber ground effects
-    bonus: 5
-    matcher:
-      rpo: 5VM          # VERIFY
-      sticker_text: "CARBON FIBER GROUND EFFECTS|VISIBLE CARBON FIBER"
-  - label: Carbon fiber interior trim
-    bonus: 3
-    matcher:
-      sticker_text: "CARBON FIBER.*INTERIOR|INTERIOR.*CARBON"
-  - label: High wing / upgraded spoiler
-    bonus: 2
-    matcher:
-      sticker_text: "HIGH WING|CARBON FLASH SPOILER"
-
-  # Cosmetic
-  - label: Painted calipers
-    bonus: 1
-    matcher:
-      # Real stickers print "BRAKE CALIPERS, <COLOR>" (seen on the BW fixture);
-      # cover both orderings.
-      sticker_text: "(RED|YELLOW|ORANGE|EDGE RED).{0,20}CALIPER|CALIPERS?,?\\s*(RED|YELLOW|ORANGE)"
-  - label: Colored seat belts
-    bonus: 1
-    matcher:
-      # Real stickers print color-first: "TORCH RED SEAT BELT 495.00"
-      # (1G1YC3D47P5121316). Cover both orderings.
-      sticker_text: "(RED|BLUE|YELLOW|ORANGE).{0,15}SEAT BELT|SEAT BELT.{0,25}(RED|BLUE|YELLOW|ORANGE)"
-  - label: Custom stitch package
-    bonus: 1
-    matcher:
-      sticker_text: "STITCH"
-
-  # Throwaway (badge only)
-  - label: Cargo net
-    bonus: 0
-    matcher:
-      sticker_text: "CARGO NET"
-  - label: Wheel locks
-    bonus: 0
-    matcher:
-      sticker_text: "WHEEL LOCK"
-  - label: Dealer-pack accessories
-    bonus: 0
-    matcher:
-      sticker_text: "SPLASH GUARD|FIRST AID|BATTERY PROTECTION|LUG NUT"
+- label: Front lift w/ memory
+  bonus: 8.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - E60
+    sticker_text: FRONT LIFT
+- label: Performance Data Recorder
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - UQT
+    sticker_text: PERFORMANCE DATA
+- label: Competition Sport seats
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: COMPETITION SPORT.*SEAT|COMPETITION SEAT
+- label: Performance exhaust
+  bonus: 4.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - NPP
+    sticker_text: PERFORMANCE EXHAUST
+- label: Visible carbon fiber ground effects
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - 5VM
+    sticker_text: CARBON FIBER GROUND EFFECTS|VISIBLE CARBON FIBER
+- label: Carbon fiber interior trim
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: CARBON FIBER.*INTERIOR|INTERIOR.*CARBON
+- label: High wing / upgraded spoiler
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: HIGH WING|CARBON FLASH SPOILER
+- label: Painted calipers
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: (RED|YELLOW|ORANGE|EDGE RED).{0,20}CALIPER|CALIPERS?,?\s*(RED|YELLOW|ORANGE)
+- label: Colored seat belts
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: (RED|BLUE|YELLOW|ORANGE).{0,15}SEAT BELT|SEAT BELT.{0,25}(RED|BLUE|YELLOW|ORANGE)
+- label: Custom stitch package
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: STITCH
+- label: Cargo net
+  bonus: 0.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: CARGO NET
+- label: Wheel locks
+  bonus: 0.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: WHEEL LOCK
+- label: Dealer-pack accessories
+  bonus: 0.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: SPLASH GUARD|FIRST AID|BATTERY PROTECTION|LUG NUT
+- label: Seat Belt Color Yellow
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - 3M9
+    sticker_text: null
+- label: Caliper Color Yellow
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - J6E
+    sticker_text: null
+review_on_unknown_hard: true

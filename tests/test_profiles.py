@@ -28,6 +28,28 @@ def test_seed_profiles_load():
     }
 
 
+def test_bw_belt_and_suede_matchers_fixed_against_real_sticker_text():
+    """Regression for 1G6DL5RP5P0460421: the scrambled sticker prints
+    'SEAT BELT COLOR, 400.00' (must match — Torch Red is the only offered
+    belt color) and the STANDARD sueded shift knob line (must NOT match)."""
+    bw = load_profile(CONFIG / "ct4v_blackwing.yaml")
+    belts = next(h for h in bw.highlights if "seat belt" in h.label.lower())
+    suede = next(h for h in bw.highlights if "microfiber" in h.label.lower())
+    belt_re = belts.matcher.compiled()
+    suede_re = suede.matcher.compiled()
+
+    assert belt_re.search("STEERING WHEEL, HEATED SEAT BELT COLOR, 400.00")
+    assert belt_re.search("TORCH RED SEAT BELT 495.00")
+    assert belt_re.search("709-SEAT BELT COLOR TORCH RED (93)")  # build-sheet form
+    assert not belt_re.search("719-SEAT BELT COLOR-BLACK (10)")  # standard black
+    assert not belt_re.search("3N9-SEAT BELT COLOR TAN")  # standard tan
+
+    assert not suede_re.search("SUEDED MICROFIBER WRAPPED AUTOMATIC")  # standard knob
+    assert suede_re.search("SUEDED MICROFIBER PACKAGE 600.00")
+    assert suede_re.search("SUEDED MICROFIBER STEERING WHEEL AND SHIFT KNOB")
+    assert "709" in belts.matcher.rpo and "53S" in suede.matcher.rpo
+
+
 def test_round_trip_is_stable():
     c8 = load_profile(CONFIG / "c8_stingray.yaml")
     reparsed = load_profile_str(dump_profile(c8))

@@ -54,19 +54,28 @@ _C8_PAINT: dict[str, ColorFamily] = {
     # brown
     "G26": ColorFamily.brown,  # Caffeine          # VERIFY
     "G1W": ColorFamily.brown,  # Zeus Bronze        # VERIFY
+    # other
+    "GXL": ColorFamily.other,  # Hysteria Purple — VERIFIED (corpus sticker)
 }
 
 _CT4V_PAINT: dict[str, ColorFamily] = {
     "GSK": ColorFamily.blue,  # Electric Blue       # VERIFY
-    "G1K": ColorFamily.blue,  # Wave Metallic (blue)# VERIFY
     "GKZ": ColorFamily.red,  # Velocity Red         # VERIFY
     "G7C": ColorFamily.red,  # Infrared Tintcoat    # VERIFY
     "GAZ": ColorFamily.white,  # Summit White       # VERIFY
     "G1W": ColorFamily.white,  # Crystal White Tri. # VERIFY
     "GBA": ColorFamily.black,  # Black Raven — VERIFIED (1G6D65RP8N0460286)
-    "GLK": ColorFamily.gray,  # Rift Metallic (gray)# VERIFY
     "G9K": ColorFamily.gray,  # Shadow Metallic     # VERIFY
     "GNL": ColorFamily.silver,  # Radiant Silver    # VERIFY
+    # 2026-07-16 corpus audit (sticker exterior line x paint G-code, all
+    # VERIFIED): the earlier GLK "Rift" and G1K "Wave" guesses were wrong.
+    "GRW": ColorFamily.silver,  # Rift Metallic (listing feeds say Silver)
+    "GAI": ColorFamily.blue,  # Deep Space Metallic (dark navy)
+    "GAE": ColorFamily.gray,  # Drift Metallic
+    "GNW": ColorFamily.black,  # Maverick Noir Frost (matte black)
+    "GXU": ColorFamily.gray,  # Midnight Steel Metallic
+    "GBW": ColorFamily.gray,  # Typhoon Metallic
+    "GKK": ColorFamily.blue,  # Wave Metallic (light blue)
 }
 
 _PAINT_TABLES: dict[str, dict[str, ColorFamily]] = {
@@ -78,6 +87,17 @@ _PAINT_TABLES: dict[str, dict[str, ColorFamily]] = {
 # more specific keywords win (e.g., "carbon flash" before "black").
 _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("CARBON FLASH", ColorFamily.black),
+    # GM marketing names that carry no family word (2026-07-16 corpus audit).
+    ("DEEP SPACE", ColorFamily.blue),
+    ("RIFT METALLIC", ColorFamily.silver),
+    ("DRIFT METALLIC", ColorFamily.gray),
+    ("TYPHOON", ColorFamily.gray),
+    ("MAVERICK NOIR", ColorFamily.black),
+    ("NOIR", ColorFamily.black),
+    ("MIDNIGHT STEEL", ColorFamily.gray),
+    ("WAVE METALLIC", ColorFamily.blue),
+    ("HYSTERIA", ColorFamily.other),
+    ("PURPLE", ColorFamily.other),
     ("BLUE", ColorFamily.blue),
     ("RED", ColorFamily.red),
     ("WHITE", ColorFamily.white),

@@ -407,6 +407,16 @@ class Pipeline:
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
             kw["vin_facts"] = facts
+            # If neither the paint code nor the sticker's marketing name maps
+            # to a color family, fall back to the listing's color text (both
+            # text paths score as claimed provenance anyway).
+            listing_color = row["color"] if row else None
+            if (
+                colors.family_from_rpo(model_key, kw.get("paint_rpo")) is None
+                and colors.family_from_text(kw.get("color_text")) is None
+                and colors.family_from_text(listing_color) is not None
+            ):
+                kw["color_text"] = listing_color
             return Vehicle(**kw)
 
         # No sticker: VIN facts (verified) + listing data (claimed).

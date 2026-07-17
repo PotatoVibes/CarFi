@@ -1,147 +1,205 @@
+# Managed by the Car Finder config UI (edits regenerate this file;
+# the previous version is kept alongside as .bak).
 name: Cadillac CT4-V Blackwing
 model_key: ct4v_blackwing
-
-# Server-side prefilter (Auto.dev). Wider than the hard bounds by design.
-# NOTE (2026-07-16 count probes): Auto.dev files most of these cars under
-# model "CT4" with trim "V Blackwing" — the "CT4-V" bucket holds only ~14
-# cars nationally (mostly non-Blackwings). Query BOTH buckets (comma list)
-# with the trim filter: ~160 real Blackwings vs 15 before. price_margin is
-# wide because Blackwings often list above the hard bound and drop into
-# range later — the tracker watches for exactly that.
 query:
   make: Cadillac
-  model: "CT4,CT4-V"
+  model: CT4,CT4-V
   trim: V Blackwing
-  price_margin: 0.40
-
-# --- Hard requirements (verified-only pass/fail) --------------------------
+  year_min: null
+  year_max: null
+  price_max: null
+  price_margin: 0.4
 hard:
-  - key: model_ct4v_blackwing
-    label: CT4-V Blackwing
-    kind: require
-    matcher:
-      # VIN pos 8 engine: P = 3.6TT LF4 (Blackwing-only), L = 2.7T (never a
-      # Blackwing) — corpus-verified in src/carfinder/vin.py. Transmission is
-      # NOT in the VIN; manual still requires the sticker (MG9).
-      vin_attr: model
-      vin_any: [BLACKWING]
-      sticker_text: "CT4-V BLACKWING|BLACKWING"
-
-  - key: year_2022_plus
-    label: 2022 or newer
-    kind: year_min
-    min_year: 2022
-
-  - key: manual_transmission
-    label: 6-speed manual
-    kind: require
-    matcher:
-      # VIN pos 5 on Blackwings: 6 = manual, 7 = automatic (6/6 corpus
-      # cars; 2023's unified DL5 series decodes to nothing and falls
-      # through). MG9 VERIFIED against 1G6D65RP8N0460286 (manual car); the
-      # text regex also matches build-sheet transmission lines.
-      vin_attr: trans
-      vin_any: [MANUAL]
-      rpo: MG9
-      sticker_text: "6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION"
-
-  # Super Cruise / auto excluded implicitly by the manual requirement; a
-  # verified automatic sticker will fail manual_transmission above.
-  - key: ventilated_seats
-    label: Ventilated seats
-    kind: require
-    matcher:
-      rpo: KU9          # VERIFIED on 1G6D65RP8N0460286 (ventilated frt seats)
-      sticker_text: "VENTILATED"
-
-  - key: head_up_display
-    label: Head-Up Display
-    kind: require
-    matcher:
-      rpo: UV6          # VERIFIED on 1G6D65RP8N0460286 (HUD)
-      sticker_text: "HEAD-UP DISPLAY|HEAD UP DISPLAY|HUD"
-
-# --- Soft requirements (weighted penalty curves) --------------------------
+- key: model_ct4v_blackwing
+  label: CT4-V Blackwing
+  kind: require
+  matcher:
+    vin_attr: model
+    vin_any:
+    - BLACKWING
+    rpo: []
+    sticker_text: CT4-V BLACKWING|BLACKWING
+  min_year: null
+- key: year_2022_plus
+  label: 2022 or newer
+  kind: year_min
+  matcher: null
+  min_year: 2022
+- key: manual_transmission
+  label: 6-speed manual
+  kind: require
+  matcher:
+    vin_attr: trans
+    vin_any:
+    - MANUAL
+    rpo:
+    - MG9
+    sticker_text: 6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION
+  min_year: null
+- key: ventilated_seats
+  label: Ventilated seats
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - KU9
+    sticker_text: VENTILATED
+  min_year: null
+- key: head_up_display
+  label: Head-Up Display
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - UV6
+    sticker_text: HEAD-UP DISPLAY|HEAD UP DISPLAY|HUD
+  min_year: null
 soft:
-  - key: miles
-    label: Mileage
-    kind: numeric
-    attr: miles
-    ideal: 50000
-    hard: 60000
-    direction: lower_better
-    weight: 0.20
-
-  - key: price
-    label: Price
-    kind: numeric
-    attr: price
-    ideal: 60000
-    hard: 65000        # "for sure less than" -> hard bound
-    direction: lower_better
-    weight: 0.25
-    # With the wide prefilter above, over-budget cars are now ingested for
-    # price-drop tracking — this keeps them OUT of the ranked list until
-    # their asking price actually falls under the hard bound.
-    exclude_beyond_hard: true
-
-  - key: color
-    label: Color
-    kind: color
-    weight: 0.10
-    preferred: [blue]
-    penalized: [black, white, red]
-
-# --- Highlights (bonus badges; total capped at +10 by the scorer) ---------
+- key: miles
+  label: Mileage
+  kind: numeric
+  weight: 0.2
+  attr: miles
+  ideal: 50000.0
+  hard: 60000.0
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: price
+  label: Price
+  kind: numeric
+  weight: 0.25
+  attr: price
+  ideal: 60000.0
+  hard: 65000.0
+  direction: lower_better
+  exclude_beyond_hard: true
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: color
+  label: Color
+  kind: color
+  weight: 0.1
+  attr: null
+  ideal: null
+  hard: null
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred:
+  - blue
+  - yellow
+  - green
+  penalized:
+  - red
+  - white
+  - black
+  neutral_score: 50.0
 highlights:
-  # Genuinely valuable
-  - label: Carbon Fiber Package 1
-    bonus: 8
-    matcher:
-      rpo: CFZ
-      sticker_text: "CARBON FIBER 1|CARBON FIBER PACKAGE 1"
-  - label: Carbon Fiber Package 2
-    bonus: 6
-    matcher:
-      rpo: CFV
-      sticker_text: "CARBON FIBER 2|CARBON FIBER PACKAGE 2"
-  - label: Sueded microfiber package
-    bonus: 3
-    matcher:
-      sticker_text: "SUEDED MICROFIBER|SUEDE.*STEERING|ALCANTARA"
-  - label: Power sunroof
-    bonus: 3
-    matcher:
-      rpo: CF5          # VERIFIED on 1G6D65RP8N0460286 (sunroof $1,050)
-      sticker_text: "SUNROOF"
-  - label: Performance Data Recorder
-    bonus: 2
-    matcher:
-      rpo: UQT          # VERIFIED on 1G6D65RP8N0460286 (PDR $1,600)
-      sticker_text: "PERFORMANCE DATA"
-  - label: Massaging seats
-    bonus: 2
-    matcher:
-      sticker_text: "MASSAG"
-
-  # Cosmetic
-  - label: Painted calipers
-    bonus: 1
-    matcher:
-      # Real stickers print "BRAKE CALIPERS, RED" (color AFTER the noun) —
-      # original color-first pattern missed it. Fixed against 0460286.
-      sticker_text: "(BRONZE|RED|BLUE).{0,20}CALIPER|CALIPERS?,?\\s*(BRONZE|RED|BLUE)"
-  - label: Red seat belts
-    bonus: 3
-    matcher:
-      sticker_text: "TORCH RED SEAT BELT|RED SEAT BELT"
-  - label: Upgraded wheel finish
-    bonus: 1
-    matcher:
-      sticker_text: "BLACK.*WHEEL|POLISHED.*WHEEL|DIAMOND CUT"
-
-  # Throwaway (badge only)
-  - label: Dealer-pack accessories
-    bonus: 0
-    matcher:
-      sticker_text: "CARGO MAT|CARGO NET|ILLUMINATED.*SILL|WHEEL LOCK|LUG"
+- label: Carbon Fiber Package 1
+  bonus: 8.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - CFZ
+    sticker_text: CARBON FIBER 1|CARBON FIBER PACKAGE 1
+- label: Carbon Fiber Package 2
+  bonus: 6.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - CFV
+    sticker_text: CARBON FIBER 2|CARBON FIBER PACKAGE 2
+# Suede package: 53S is the steering-wheel code (from the build-sheet
+# catalog). The old generic "SUEDED MICROFIBER" text overfired on the
+# STANDARD sueded shift knob every automatic BW sticker prints.
+- label: Sueded microfiber package
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - 53S
+    sticker_text: SUEDED MICROFIBER PACKAGE|SUEDE.{0,30}STEERING
+- label: Power sunroof
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - CF5
+    sticker_text: SUNROOF
+- label: Performance Data Recorder
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - UQT
+    sticker_text: PERFORMANCE DATA
+- label: Massaging seats
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: MASSAG
+- label: Painted calipers
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: (BRONZE|RED|BLUE).{0,20}CALIPER|CALIPERS?,?\s*(BRONZE|RED|BLUE)
+# Torch Red belts: 709 is the build-sheet code; the text net also covers
+# the sticker's column-scrambled priced line "SEAT BELT COLOR, 400.00"
+# (Torch Red is the only belt color BW offers) while NOT matching the
+# build sheets' standard "SEAT BELT COLOR-BLACK/TAN" lines.
+- label: Torch Red seat belts
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - '709'
+    sticker_text: TORCH RED SEAT BELT|RED SEAT BELT|SEAT BELT COLOR,?\s*\$?\s*\d|SEAT
+      BELT COLOR.{0,3}TORCH RED
+- label: Upgraded wheel finish
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: BLACK.*WHEEL|POLISHED.*WHEEL|DIAMOND CUT
+- label: Knob Suede
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - 5CS
+    sticker_text: null
+- label: Interior Trim Pkg Wrapped Suede
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - IWE
+    sticker_text: null
+- label: Caliper Color Red
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - J6F
+    sticker_text: null
+review_on_unknown_hard: true
