@@ -129,8 +129,9 @@ def test_detail_without_location_says_unknown(seeded_settings):
 
 def test_matches_color_uses_scorer_resolved_family(seeded_settings):
     r = _client(seeded_settings).get("/m/ct4v_blackwing").text
-    assert "Black Raven" in r  # paint name, title-cased from match_results
-    assert "scored as black" in r  # family tooltip matches the detail page
+    # Generic family label, matching the detail page's "Black (Black Raven)".
+    assert 'data-color="black black raven"' in r
+    assert 'title="Black Raven"' in r  # specific paint name on hover
     # A row never (re)scored with the new columns falls back to listing text.
     r2 = _client(seeded_settings).get("/m/c8_stingray").text
     assert "Rapid Blue" in r2

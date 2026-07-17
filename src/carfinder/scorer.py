@@ -231,11 +231,12 @@ def _evaluate_color(c: SoftConstraint, vehicle: Vehicle, model_key: str) -> _Sof
     else:
         score = c.neutral_score
     # Show the actual paint name next to the family when it adds information:
-    # "white (Rift Metallic) -> 0", but never "white (White) -> 100". The
+    # "White (Rift Metallic) -> 0", but never "White (White) -> 100". The
+    # family is title-cased to match the match-list Color column exactly. The
     # resolved family + paint name also ride along as structured fields so
     # every page renders the same color this scorer used.
     paint = (vehicle.color_text or "").strip()
-    label = f"{name} ({paint.title()})" if paint and paint.lower() != name else name
+    label = f"{name.title()} ({paint.title()})" if paint and paint.lower() != name else name.title()
     return _SoftEval(
         _soft_result(
             c,

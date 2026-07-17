@@ -51,11 +51,18 @@ class MatchRow:
 
     @property
     def color_display(self) -> str | None:
-        """What the Color column shows: the actual paint name when the scorer
-        resolved one, else the resolved family, else the listing's text."""
-        if self.paint_name:
+        """What the Color column shows: the generic family the scorer resolved
+        ("White" — matching the detail page's label), else the listing's text.
+        The specific paint name goes in the hover tooltip (paint_display)."""
+        if self.color_family:
+            return self.color_family.title()
+        return self.color
+
+    @property
+    def paint_display(self) -> str | None:
+        if self.paint_name and self.paint_name.lower() != (self.color_family or ""):
             return self.paint_name.title()
-        return self.color_family or self.color
+        return None
 
 
 def ranked_matches(

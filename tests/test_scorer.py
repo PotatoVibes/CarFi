@@ -166,11 +166,11 @@ def test_color_detail_includes_paint_name_when_informative():
         p, Vehicle(miles=50000, price=65000, paint_rpo="GM0", color_text="ELKHART LAKE BLUE")
     )
     d = next(s for s in r.soft if s.key == "color").detail
-    assert d == "blue (Elkhart Lake Blue) -> 100"
+    assert d == "Blue (Elkhart Lake Blue) -> 100"
     # Paint name IS the family word -> no redundant "(White)".
     r2 = score_vehicle(p, Vehicle(miles=50000, price=65000, color_text="White"))
     d2 = next(s for s in r2.soft if s.key == "color").detail
-    assert d2 == "white -> 0"
+    assert d2 == "White -> 0"
 
 
 def test_rift_metallic_classifies_as_white():
@@ -182,7 +182,7 @@ def test_rift_metallic_classifies_as_white():
     )
     c = next(s for s in r.soft if s.key == "color")
     assert c.dim_score == pytest.approx(0.0)
-    assert c.detail == "white (Rift Metallic) -> 0"
+    assert c.detail == "White (Rift Metallic) -> 0"
     # Structured fields ride along so list pages render the same color.
     assert c.color_family == "white"
     assert c.paint_name == "Rift Metallic"
