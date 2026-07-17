@@ -219,6 +219,7 @@ Two caveats for a brand-new model:
 | Pull the latest listings | **Sync now** button (or `carfinder sync`) |
 | Full refresh (price drops, sold cars) | **Full pass** button (or `carfinder sync --full`, weekly) |
 | Open the actual dealer listing | car detail page → **view listing ↗** |
+| Hide a car I've already looked at | **✕** on its row (or **Dismiss** on its detail page); restore via "show dismissed" |
 | Change what I'm looking for | edit `config/*.yaml`, then the **Rescore** button (or `carfinder rescore`) |
 | Add a model | new `config/<model>.yaml`, then `carfinder sync` |
 | Check my spend | `carfinder budget` |
