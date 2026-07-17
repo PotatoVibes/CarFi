@@ -332,18 +332,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/config/{model_key}/feature")
     async def config_feature(request: Request, model_key: str):
+        """Add a feature from the catalog OR a hand-entered custom one.
+        A build code is optional for custom features — the matcher falls back
+        to a text pattern (default: the literal feature name)."""
         form = await _form(request)
         action = _field(form, "action")
         code = _field(form, "code").strip().upper()
         desc = _field(form, "description", code).strip()
-        if not code:
+        text = _field(form, "sticker_text").strip() or None
+        if not code and not desc:
             return RedirectResponse(f"/config/{model_key}", status_code=303)
 
         def mutate(p):
             if action == "highlight":
-                return profile_edit.add_highlight(p, code, desc, float(_field(form, "bonus", "3")))
+                return profile_edit.add_highlight(
+                    p, code, desc, float(_field(form, "bonus", "3")), sticker_text=text
+                )
             if action in ("require", "forbid"):
-                return profile_edit.add_hard(p, code, desc, action)
+                return profile_edit.add_hard(p, code, desc, action, sticker_text=text)
             if action == "remove":
                 return profile_edit.remove_code(p, code)
             raise ProfileError(f"unknown action {action!r}")

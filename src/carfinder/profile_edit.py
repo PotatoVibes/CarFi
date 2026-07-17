@@ -32,25 +32,55 @@ def _validated(profile: Profile) -> Profile:
     return load_profile_str(dump_profile(profile))
 
 
-# --- feature operations (RPO-code based) -------------------------------------
+# --- feature operations -------------------------------------------------------
 
 
-def add_highlight(profile: Profile, code: str, description: str, bonus: float) -> Profile:
-    p = remove_code(profile, code)  # replace any prior role for this code
-    p.highlights.append(Highlight(label=description, bonus=bonus, matcher=Matcher(rpo=[code])))
+def _matcher_for(code: str, description: str, sticker_text: str | None) -> Matcher:
+    """Build a matcher from whatever the user supplied. A build code is the
+    precise signal when given; otherwise (or additionally) a text pattern —
+    defaulting to the literal feature name — keeps the feature matchable."""
+    rpo = [code] if code else []
+    text = (sticker_text or "").strip() or None
+    if text is None and not rpo:
+        text = re.escape(description.strip().upper())
+    return Matcher(rpo=rpo, sticker_text=text)
+
+
+def add_highlight(
+    profile: Profile,
+    code: str,
+    description: str,
+    bonus: float,
+    sticker_text: str | None = None,
+) -> Profile:
+    p = remove_code(profile, code) if code else profile.model_copy(deep=True)
+    p.highlights = [h for h in p.highlights if h.label != description]  # replace same label
+    p.highlights.append(
+        Highlight(
+            label=description, bonus=bonus, matcher=_matcher_for(code, description, sticker_text)
+        )
+    )
     return _validated(p)
 
 
-def add_hard(profile: Profile, code: str, description: str, kind: str) -> Profile:
+def add_hard(
+    profile: Profile,
+    code: str,
+    description: str,
+    kind: str,
+    sticker_text: str | None = None,
+) -> Profile:
     if kind not in ("require", "forbid"):
         raise ProfileError(f"unknown hard kind {kind!r}")
-    p = remove_code(profile, code)
+    p = remove_code(profile, code) if code else profile.model_copy(deep=True)
+    key = _slug(description)
+    p.hard = [c for c in p.hard if c.key != key]  # replace same key
     p.hard.append(
         HardConstraint(
-            key=_slug(description),
+            key=key,
             label=description,
             kind=kind,  # type: ignore[arg-type]
-            matcher=Matcher(rpo=[code]),
+            matcher=_matcher_for(code, description, sticker_text),
         )
     )
     return _validated(p)

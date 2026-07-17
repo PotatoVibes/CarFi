@@ -80,6 +80,41 @@ def test_add_hard_replaces_prior_role_for_code():
     assert any(c.matcher and "JF5" in c.matcher.rpo and c.kind == "require" for c in p.hard)
 
 
+def test_custom_feature_without_code_matches_by_name_text():
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    p = profile_edit.add_highlight(bw, "", "Cyber Yellow Metallic", 3)
+    h = next(x for x in p.highlights if x.label == "Cyber Yellow Metallic")
+    assert h.matcher.rpo == []
+    # Falls back to the literal (escaped) name as the sticker-text pattern.
+    assert h.matcher.compiled().search("EXTERIOR: CYBER YELLOW METALLIC ENGINE")
+
+
+def test_custom_feature_with_code_and_custom_text():
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    p = profile_edit.add_highlight(
+        bw, "GCP", "Cyber Yellow Metallic", 5, sticker_text="CYBER YELLOW"
+    )
+    h = next(x for x in p.highlights if x.label == "Cyber Yellow Metallic")
+    assert h.matcher.rpo == ["GCP"]
+    assert h.matcher.sticker_text == "CYBER YELLOW"
+
+
+def test_custom_feature_same_label_replaces_not_duplicates():
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    p = profile_edit.add_highlight(bw, "", "Cyber Yellow Metallic", 3)
+    p = profile_edit.add_highlight(p, "", "Cyber Yellow Metallic", 8)
+    matches = [x for x in p.highlights if x.label == "Cyber Yellow Metallic"]
+    assert len(matches) == 1 and matches[0].bonus == 8
+
+
+def test_custom_feature_bad_regex_rejected():
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    # Pydantic raises ValidationError (a ValueError) at Matcher construction;
+    # the web layer catches ValueError and flashes "Rejected" without writing.
+    with pytest.raises(ValueError):
+        profile_edit.add_highlight(bw, "", "Broken", 3, sticker_text="(unclosed")
+
+
 def test_set_numeric_and_year_and_colors():
     bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
     p = profile_edit.set_numeric(bw, "price", 58000, 63000, 0.3, True)
@@ -160,6 +195,25 @@ def test_editor_feature_highlight_persists_to_yaml(editor_client):
     assert h.bonus == 5 and h.matcher.rpo == ["JF5"]
     # The editor page now shows it as in-profile.
     assert "Alloy Pedals" in c.get("/config/ct4v_blackwing").text
+
+
+def test_editor_custom_feature_without_code(editor_client):
+    c, cfg = editor_client
+    r = c.post(
+        "/config/ct4v_blackwing/feature",
+        data={
+            "action": "require",
+            "code": "",
+            "description": "Cyber Yellow Metallic",
+            "sticker_text": "CYBER YELLOW",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "Saved" in r.headers["location"]
+    saved = load_profile(cfg / "ct4v_blackwing.yaml")
+    req = next(x for x in saved.hard if x.label == "Cyber Yellow Metallic")
+    assert req.kind == "require" and req.matcher.rpo == []
+    assert req.matcher.sticker_text == "CYBER YELLOW"
 
 
 def test_editor_bounds_persist(editor_client):

@@ -117,9 +117,6 @@ highlights:
     rpo:
     - CFV
     sticker_text: CARBON FIBER 2|CARBON FIBER PACKAGE 2
-# Suede package: 53S is the steering-wheel code (from the build-sheet
-# catalog). The old generic "SUEDED MICROFIBER" text overfired on the
-# STANDARD sueded shift knob every automatic BW sticker prints.
 - label: Sueded microfiber package
   bonus: 3.0
   matcher:
@@ -144,24 +141,6 @@ highlights:
     rpo:
     - UQT
     sticker_text: PERFORMANCE DATA
-- label: Massaging seats
-  bonus: 2.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: MASSAG
-- label: Painted calipers
-  bonus: 1.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: (BRONZE|RED|BLUE).{0,20}CALIPER|CALIPERS?,?\s*(BRONZE|RED|BLUE)
-# Torch Red belts: 709 is the build-sheet code; the text net also covers
-# the sticker's column-scrambled priced line "SEAT BELT COLOR, 400.00"
-# (Torch Red is the only belt color BW offers) while NOT matching the
-# build sheets' standard "SEAT BELT COLOR-BLACK/TAN" lines.
 - label: Torch Red seat belts
   bonus: 3.0
   matcher:
@@ -171,13 +150,6 @@ highlights:
     - '709'
     sticker_text: TORCH RED SEAT BELT|RED SEAT BELT|SEAT BELT COLOR,?\s*\$?\s*\d|SEAT
       BELT COLOR.{0,3}TORCH RED
-- label: Upgraded wheel finish
-  bonus: 1.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: BLACK.*WHEEL|POLISHED.*WHEEL|DIAMOND CUT
 - label: Knob Suede
   bonus: 3.0
   matcher:

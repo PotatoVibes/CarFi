@@ -76,6 +76,7 @@ _CT4V_PAINT: dict[str, ColorFamily] = {
     "GXU": ColorFamily.gray,  # Midnight Steel Metallic
     "GBW": ColorFamily.gray,  # Typhoon Metallic
     "GKK": ColorFamily.blue,  # Wave Metallic (light blue)
+    "GCP": ColorFamily.yellow,  # Cyber Yellow Metallic (user-supplied)
 }
 
 _PAINT_TABLES: dict[str, dict[str, ColorFamily]] = {

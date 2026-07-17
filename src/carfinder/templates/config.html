@@ -105,6 +105,43 @@
   </tbody>
 </table>
 
+<h2 style="margin-top:28px">Add a custom feature</h2>
+<div class="card" style="max-width:760px">
+  <form method="post" action="/config/{{ profile.model_key }}/feature"
+        style="display:flex; gap:10px; flex-wrap:wrap; align-items:end">
+    <label style="display:block">
+      <span class="muted" style="font-size:12.5px">Feature name</span><br>
+      <input name="description" required placeholder="e.g. Cyber Yellow Metallic"
+             style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                    background:#171a21; color:inherit; min-width:220px">
+    </label>
+    <label style="display:block">
+      <span class="muted" style="font-size:12.5px">Build code <i>(optional)</i></span><br>
+      <input name="code" placeholder="e.g. GCP" maxlength="3" pattern="[A-Za-z0-9]{2,3}"
+             style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                    background:#171a21; color:inherit; width:90px; text-transform:uppercase">
+    </label>
+    <label style="display:block">
+      <span class="muted" style="font-size:12.5px">Sticker text to match <i>(optional; regex ok)</i></span><br>
+      <input name="sticker_text" placeholder="defaults to the feature name"
+             style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                    background:#171a21; color:inherit; min-width:220px">
+    </label>
+    <span style="display:inline-flex; gap:6px; align-items:center">
+      <select name="bonus" style="font:inherit; background:#171a21; color:inherit;
+              border:1px solid #262b36; border-radius:5px; padding:5px 4px">
+        {% for b in [1, 2, 3, 5, 8] %}<option value="{{ b }}" {% if b == 3 %}selected{% endif %}>+{{ b }}</option>{% endfor %}
+      </select>
+      <button type="submit" name="action" value="highlight">★ bonus</button>
+      <button type="submit" name="action" value="require" class="secondary">must have</button>
+      <button type="submit" name="action" value="forbid" class="secondary">must NOT</button>
+    </span>
+  </form>
+  <p class="muted" style="margin-bottom:0">With a build code the match is precise (works
+    against stickers and build sheets). Without one, cars are matched by the text on their
+    window sticker — the feature name by default, or your own pattern.</p>
+</div>
+
 <h2 style="margin-top:28px">Discover features
   <span class="muted" style="font-size:14px; font-weight:400">— every factory option observed
   on {{ feats[0].total if feats else 0 }} verified cars, rarest first</span></h2>
@@ -157,10 +194,35 @@
     const q = document.getElementById("feat-q");
     if (!q) return;
     const rows = Array.from(document.querySelectorAll("#feat-table tbody tr[data-desc]"));
-    q.addEventListener("input", function () {
+    const filterKey = "featq_{{ profile.model_key }}";
+    const scrollKey = "featscroll_{{ profile.model_key }}";
+
+    function applyFilter() {
       const needle = q.value.trim().toLowerCase();
       rows.forEach(function (tr) { tr.hidden = needle && !tr.dataset.desc.includes(needle); });
+    }
+    q.addEventListener("input", function () {
+      sessionStorage.setItem(filterKey, q.value);
+      applyFilter();
     });
+
+    // Feature actions reload the page — keep the filter and scroll position
+    // so adding several similar features in a row stays fluid.
+    document.querySelectorAll("form").forEach(function (f) {
+      f.addEventListener("submit", function () {
+        sessionStorage.setItem(scrollKey, String(window.scrollY));
+      });
+    });
+    const savedQ = sessionStorage.getItem(filterKey);
+    if (savedQ) {
+      q.value = savedQ;
+      applyFilter();
+    }
+    const savedScroll = sessionStorage.getItem(scrollKey);
+    if (savedScroll !== null) {
+      window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+      sessionStorage.removeItem(scrollKey);
+    }
   })();
 </script>
 {% endblock %}
