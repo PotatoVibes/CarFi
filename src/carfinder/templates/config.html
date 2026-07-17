@@ -92,7 +92,18 @@
   {% endfor %}
   {% for h in profile.highlights %}
     <tr>
-      <td><span class="badge claimed">+{{ "%g"|format(h.bonus) }}</span></td>
+      <td>
+        <form method="post" action="/config/{{ profile.model_key }}/bonus"
+              style="display:inline-flex; gap:5px; align-items:center; margin:0">
+          <input type="hidden" name="ident" value="{{ h.label }}">
+          +<input name="bonus" type="number" min="0" max="10" step="1"
+                  value="{{ "%g"|format(h.bonus) }}"
+                  style="font:inherit; width:52px; padding:2px 6px; border-radius:5px;
+                         border:1px solid #262b36; background:#171a21; color:inherit">
+          <button type="submit" class="secondary" title="save new bonus"
+                  style="padding:2px 8px; font-size:12px">✓</button>
+        </form>
+      </td>
       <td>{{ h.label }}</td>
       <td class="muted">{% if h.matcher.rpo %}code {{ h.matcher.rpo|join(", ") }}{% endif %}
           {% if h.matcher.sticker_text %}{% if h.matcher.rpo %} · {% endif %}text match{% endif %}</td>

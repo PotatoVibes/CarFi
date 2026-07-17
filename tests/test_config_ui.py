@@ -115,6 +115,20 @@ def test_custom_feature_bad_regex_rejected():
         profile_edit.add_highlight(bw, "", "Broken", 3, sticker_text="(unclosed")
 
 
+def test_set_highlight_bonus_in_place():
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    label = bw.highlights[0].label
+    old_matcher = bw.highlights[0].matcher
+    p = profile_edit.set_highlight_bonus(bw, label, 7)
+    h = next(x for x in p.highlights if x.label == label)
+    assert h.bonus == 7
+    assert h.matcher == old_matcher  # matcher untouched
+    with pytest.raises(ProfileError):
+        profile_edit.set_highlight_bonus(bw, "No Such Feature", 5)
+    with pytest.raises(ValueError):
+        profile_edit.set_highlight_bonus(bw, label, 99)  # bonus capped at 10
+
+
 def test_set_numeric_and_year_and_colors():
     bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
     p = profile_edit.set_numeric(bw, "price", 58000, 63000, 0.3, True)
@@ -255,6 +269,31 @@ def test_editor_rejects_invalid_edit_without_writing(editor_client):
             "miles_hard": "50000",
             "miles_weight": "0.2",
         },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "Rejected" in r.headers["location"]
+    assert (cfg / "ct4v_blackwing.yaml").read_text(encoding="utf-8") == before
+
+
+def test_editor_bonus_edit_persists(editor_client):
+    c, cfg = editor_client
+    label = load_profile(cfg / "ct4v_blackwing.yaml").highlights[0].label
+    r = c.post(
+        "/config/ct4v_blackwing/bonus",
+        data={"ident": label, "bonus": "9"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "Saved" in r.headers["location"]
+    saved = load_profile(cfg / "ct4v_blackwing.yaml")
+    assert next(h.bonus for h in saved.highlights if h.label == label) == 9
+
+
+def test_editor_bonus_edit_unknown_label_rejected(editor_client):
+    c, cfg = editor_client
+    before = (cfg / "ct4v_blackwing.yaml").read_text(encoding="utf-8")
+    r = c.post(
+        "/config/ct4v_blackwing/bonus",
+        data={"ident": "No Such Feature", "bonus": "5"},
         follow_redirects=False,
     )
     assert r.status_code == 303 and "Rejected" in r.headers["location"]

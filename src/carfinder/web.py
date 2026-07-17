@@ -391,6 +391,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             model_key, lambda p: profile_edit.set_colors(p, preferred, penalized, weight)
         )
 
+    @app.post("/config/{model_key}/bonus")
+    async def config_bonus(request: Request, model_key: str):
+        form = await _form(request)
+        ident = _field(form, "ident")
+        bonus = float(_field(form, "bonus", "0"))
+        return _apply_and_save(
+            model_key, lambda p: profile_edit.set_highlight_bonus(p, ident, bonus)
+        )
+
     @app.post("/config/{model_key}/remove")
     async def config_remove(request: Request, model_key: str):
         form = await _form(request)

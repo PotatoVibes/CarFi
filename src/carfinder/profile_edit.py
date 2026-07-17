@@ -107,6 +107,16 @@ def remove_highlight(profile: Profile, label: str) -> Profile:
     return _validated(p)
 
 
+def set_highlight_bonus(profile: Profile, label: str, bonus: float) -> Profile:
+    """Change an existing highlight's bonus in place (matcher untouched)."""
+    p = profile.model_copy(deep=True)
+    for h in p.highlights:
+        if h.label == label:
+            h.bonus = bonus
+            return _validated(p)
+    raise ProfileError(f"no highlight named {label!r}")
+
+
 # --- bounds / preferences -----------------------------------------------------
 
 
