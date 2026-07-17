@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Config · {{ profile.name }} — Car Finder{% endblock %}
+{% block content %}
+<h1>Search profile — {{ profile.name }}</h1>
+<p>
+  {% for m in models %}
+    {% if m.model_key == profile.model_key %}<b>{{ m.name }}</b>
+    {% else %}<a href="/config/{{ m.model_key }}">{{ m.name }}</a>{% endif %}
+    {% if not loop.last %} · {% endif %}
+  {% endfor %}
+</p>
+{% if flash %}<p class="flash">{{ flash }}</p>{% endif %}
+<p class="muted">Changes are validated before saving (a bad edit is rejected, never written),
+  the previous file is kept as <code>.bak</code>, and edits apply to newly synced cars
+  immediately — hit <b>Rescore</b> on the home page to re-rank the cars you already have.</p>
+
+<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr))">
+  <div class="card">
+    <h2 style="margin-top:0">Bounds</h2>
+    <form method="post" action="/config/{{ profile.model_key }}/bounds">
+      <table><tbody>
+        <tr><td>Year floor</td>
+          <td><input name="year_min" type="number" value="{{ year.min_year if year else 2020 }}"
+                     min="2014" max="2027" required style="width:90px"></td>
+          <td class="muted" colspan="2">older cars are excluded</td></tr>
+        <tr><th></th><th class="muted">ideal (100 pts)</th><th class="muted">hard (0 pts)</th>
+            <th class="muted">weight</th></tr>
+        <tr><td>Price $</td>
+          <td><input name="price_ideal" type="number" value="{{ price.ideal|int if price else 60000 }}" required style="width:100px"></td>
+          <td><input name="price_hard" type="number" value="{{ price.hard|int if price else 70000 }}" required style="width:100px"></td>
+          <td><input name="price_weight" type="number" step="0.05" value="{{ price.weight if price else 0.25 }}" required style="width:70px"></td></tr>
+        <tr><td></td><td colspan="3"><label class="muted">
+          <input type="checkbox" name="price_exclude" {% if price and price.exclude_beyond_hard %}checked{% endif %}>
+          exclude cars asking above the hard price (still tracked for drops)</label></td></tr>
+        <tr><td>Miles</td>
+          <td><input name="miles_ideal" type="number" value="{{ miles.ideal|int if miles else 40000 }}" required style="width:100px"></td>
+          <td><input name="miles_hard" type="number" value="{{ miles.hard|int if miles else 60000 }}" required style="width:100px"></td>
+          <td><input name="miles_weight" type="number" step="0.05" value="{{ miles.weight if miles else 0.20 }}" required style="width:70px"></td></tr>
+        <tr><td></td><td colspan="3"><label class="muted">
+          <input type="checkbox" name="miles_exclude" {% if miles and miles.exclude_beyond_hard %}checked{% endif %}>
+          exclude cars above the hard mileage</label></td></tr>
+      </tbody></table>
+      <p><button type="submit">Save bounds</button></p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Color preferences</h2>
+    <form method="post" action="/config/{{ profile.model_key }}/colors">
+      <table><tbody>
+        <tr><th class="muted">love (100 pts)</th><th class="muted">avoid (0 pts)</th></tr>
+        <tr>
+          <td>{% for f in families %}
+            <label style="display:block"><input type="checkbox" name="preferred" value="{{ f }}"
+              {% if color and f in color.preferred %}checked{% endif %}> {{ f }}</label>
+          {% endfor %}</td>
+          <td>{% for f in families %}
+            <label style="display:block"><input type="checkbox" name="penalized" value="{{ f }}"
+              {% if color and f in color.penalized %}checked{% endif %}> {{ f }}</label>
+          {% endfor %}</td>
+        </tr>
+      </tbody></table>
+      <p>weight <input name="color_weight" type="number" step="0.05"
+           value="{{ color.weight if color else 0.10 }}" style="width:70px">
+         <button type="submit">Save colors</button></p>
+      <p class="muted" style="margin-bottom:0">Unchecked colors score neutral (50). A color in
+        both lists counts as loved.</p>
+    </form>
+  </div>
+</div>
+
+<h2>Current requirements & highlights</h2>
+<table>
+  <thead><tr><th>Type</th><th>Feature</th><th>Evidence</th><th></th></tr></thead>
+  <tbody>
+  {% for c in profile.hard %}
+    <tr>
+      <td><span class="badge {{ 'excluded' if c.kind == 'forbid' else 'ranked' }}">{{ c.kind }}</span></td>
+      <td>{{ c.label }}</td>
+      <td class="muted">
+        {% if c.kind == "year_min" %}{{ c.min_year }}+
+        {% else %}{% if c.matcher.vin_attr %}VIN · {% endif %}{% if c.matcher.rpo %}code {{ c.matcher.rpo|join(", ") }}{% endif %}
+        {% if c.matcher.sticker_text %}{% if c.matcher.rpo %} · {% endif %}text match{% endif %}{% endif %}
+      </td>
+      <td>{% if c.kind != "year_min" %}
+        <form method="post" action="/config/{{ profile.model_key }}/remove" style="margin:0"
+              onsubmit="return confirm('Remove the {{ c.label }} requirement?')">
+          <input type="hidden" name="kind" value="hard"><input type="hidden" name="ident" value="{{ c.key }}">
+          <button type="submit" class="secondary" style="padding:2px 9px; font-size:12px">✕</button>
+        </form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  {% for h in profile.highlights %}
+    <tr>
+      <td><span class="badge claimed">+{{ "%g"|format(h.bonus) }}</span></td>
+      <td>{{ h.label }}</td>
+      <td class="muted">{% if h.matcher.rpo %}code {{ h.matcher.rpo|join(", ") }}{% endif %}
+          {% if h.matcher.sticker_text %}{% if h.matcher.rpo %} · {% endif %}text match{% endif %}</td>
+      <td><form method="post" action="/config/{{ profile.model_key }}/remove" style="margin:0">
+        <input type="hidden" name="kind" value="highlight"><input type="hidden" name="ident" value="{{ h.label }}">
+        <button type="submit" class="secondary" style="padding:2px 9px; font-size:12px">✕</button>
+      </form></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 style="margin-top:28px">Discover features
+  <span class="muted" style="font-size:14px; font-weight:400">— every factory option observed
+  on {{ feats[0].total if feats else 0 }} verified cars, rarest first</span></h2>
+<p><input id="feat-q" type="search" placeholder="filter features — e.g. carbon, seat, exhaust…"
+       style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+              background:#171a21; color:inherit; min-width:280px"></p>
+<table id="feat-table">
+  <thead><tr><th>Feature</th><th style="width:150px">How rare</th><th>In profile</th><th>Add as…</th></tr></thead>
+  <tbody>
+  {% for f in feats %}
+    <tr data-desc="{{ f.description|lower }} {{ f.code|lower }}">
+      <td>{{ f.description }} <span class="muted" style="font-size:11.5px">({{ f.code }})</span></td>
+      <td><div class="bar" title="{{ f.count }} of {{ f.total }} cars"><span
+            style="width: {{ f.prevalence|round|int }}%"></span></div>
+          <span class="muted" style="font-size:12px">{{ f.prevalence|round|int }}% of cars</span></td>
+      <td>
+        {% if f.status == "highlight" %}<span class="badge claimed">+{{ "%g"|format(f.bonus) }} bonus</span>
+        {% elif f.status == "require" %}<span class="badge ranked">required</span>
+        {% elif f.status == "forbid" %}<span class="badge excluded">forbidden</span>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td style="white-space:nowrap">
+        <form method="post" action="/config/{{ profile.model_key }}/feature"
+              style="display:inline-flex; gap:6px; align-items:center; margin:0">
+          <input type="hidden" name="code" value="{{ f.code }}">
+          <input type="hidden" name="description" value="{{ f.description }}">
+          <select name="bonus" style="font:inherit; background:#171a21; color:inherit;
+                  border:1px solid #262b36; border-radius:5px; padding:2px 4px">
+            {% for b in [1, 2, 3, 5, 8] %}<option value="{{ b }}" {% if b == 3 %}selected{% endif %}>+{{ b }}</option>{% endfor %}
+          </select>
+          <button type="submit" name="action" value="highlight"
+                  style="padding:3px 10px; font-size:12.5px">★ bonus</button>
+          <button type="submit" name="action" value="require" class="secondary"
+                  style="padding:3px 10px; font-size:12.5px">must have</button>
+          <button type="submit" name="action" value="forbid" class="secondary"
+                  style="padding:3px 10px; font-size:12.5px">must NOT</button>
+          {% if f.status %}<button type="submit" name="action" value="remove" class="secondary"
+                  style="padding:3px 10px; font-size:12.5px" title="remove from profile">✕</button>{% endif %}
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">No verified option data yet — run a sync/rescore so
+      window stickers and build sheets accumulate, then features appear here.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script>
+  (function () {
+    const q = document.getElementById("feat-q");
+    if (!q) return;
+    const rows = Array.from(document.querySelectorAll("#feat-table tbody tr[data-desc]"));
+    q.addEventListener("input", function () {
+      const needle = q.value.trim().toLowerCase();
+      rows.forEach(function (tr) { tr.hidden = needle && !tr.dataset.desc.includes(needle); });
+    });
+  })();
+</script>
+{% endblock %}

@@ -15,17 +15,19 @@ import logging
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import colors, store
+from . import colors, features, profile_edit, store
 from .budget import BudgetGuard
+from .colors import ColorFamily
 from .config import Settings, load_settings
 from .db import bootstrap
 from .pipeline import PipelineStats
+from .profiles import ProfileError, load_profile
 from .runner import load_profiles
 
 log = logging.getLogger("carfinder.web")
@@ -35,6 +37,17 @@ _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 def _now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+async def _form(request: Request) -> dict[str, list[str]]:
+    """Parse a urlencoded form body without the python-multipart dependency
+    (starlette's request.form() requires it even for urlencoded posts)."""
+    return parse_qs((await request.body()).decode("utf-8"))
+
+
+def _field(form: dict[str, list[str]], key: str, default: str = "") -> str:
+    values = form.get(key)
+    return values[0] if values else default
 
 
 def _summarize_sync(results: dict[str, PipelineStats]) -> str:
@@ -246,6 +259,146 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if row and row["path"] and Path(row["path"]).exists():
             return FileResponse(row["path"], media_type="application/pdf")
         return Response("No sticker on file", status_code=404)
+
+    def _reload_profiles() -> None:
+        try:
+            app.state.profiles = load_profiles(settings.config_dir)
+        except Exception:
+            log.exception("profile reload failed")
+        app.state.profiles_by_key = {p.model_key: p for p in app.state.profiles}
+
+    def _profile_path(model_key: str) -> Path | None:
+        for path in sorted(Path(settings.config_dir).glob("*.yaml")):
+            try:
+                if load_profile(path).model_key == model_key:
+                    return path
+            except ProfileError:
+                continue
+        return None
+
+    @app.get("/config", response_class=HTMLResponse)
+    def config_index():
+        first = app.state.profiles[0].model_key if app.state.profiles else None
+        if first:
+            return RedirectResponse(f"/config/{first}", status_code=303)
+        return HTMLResponse("No profiles found", status_code=404)
+
+    @app.get("/config/{model_key}", response_class=HTMLResponse)
+    def config_editor(request: Request, model_key: str, flash: str | None = None):
+        path = _profile_path(model_key)
+        if path is None:
+            return HTMLResponse("Unknown model", status_code=404)
+        profile = load_profile(path)
+        c = conn()
+        try:
+            feats = features.catalog(c, profile)
+        finally:
+            c.close()
+        price = next((s for s in profile.soft if s.kind == "numeric" and s.attr == "price"), None)
+        miles = next((s for s in profile.soft if s.kind == "numeric" and s.attr == "miles"), None)
+        color = next((s for s in profile.soft if s.kind == "color"), None)
+        year = next((c2 for c2 in profile.hard if c2.kind == "year_min"), None)
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "config.html",
+            {
+                "profile": profile,
+                "models": app.state.profiles,
+                "feats": feats,
+                "price": price,
+                "miles": miles,
+                "color": color,
+                "year": year,
+                "families": [f.value for f in ColorFamily],
+                "flash": flash,
+            },
+        )
+
+    def _apply_and_save(model_key: str, mutate) -> RedirectResponse:
+        """Load the profile fresh from disk, apply an edit, save, hot-reload."""
+        path = _profile_path(model_key)
+        if path is None:
+            return HTMLResponse("Unknown model", status_code=404)  # type: ignore[return-value]
+        try:
+            updated = mutate(load_profile(path))
+            profile_edit.save_profile(path, updated)
+        except (ProfileError, ValueError) as exc:
+            return RedirectResponse(
+                f"/config/{model_key}?flash={quote(f'Rejected: {exc}'[:180])}", status_code=303
+            )
+        _reload_profiles()
+        saved_msg = quote("Saved — hit Rescore (home page) to re-rank existing cars.")
+        return RedirectResponse(f"/config/{model_key}?flash={saved_msg}", status_code=303)
+
+    @app.post("/config/{model_key}/feature")
+    async def config_feature(request: Request, model_key: str):
+        form = await _form(request)
+        action = _field(form, "action")
+        code = _field(form, "code").strip().upper()
+        desc = _field(form, "description", code).strip()
+        if not code:
+            return RedirectResponse(f"/config/{model_key}", status_code=303)
+
+        def mutate(p):
+            if action == "highlight":
+                return profile_edit.add_highlight(p, code, desc, float(_field(form, "bonus", "3")))
+            if action in ("require", "forbid"):
+                return profile_edit.add_hard(p, code, desc, action)
+            if action == "remove":
+                return profile_edit.remove_code(p, code)
+            raise ProfileError(f"unknown action {action!r}")
+
+        return _apply_and_save(model_key, mutate)
+
+    @app.post("/config/{model_key}/bounds")
+    async def config_bounds(request: Request, model_key: str):
+        form = await _form(request)
+
+        def mutate(p):
+            p = profile_edit.set_year_min(p, int(_field(form, "year_min")))
+            p = profile_edit.set_numeric(
+                p,
+                "price",
+                float(_field(form, "price_ideal")),
+                float(_field(form, "price_hard")),
+                float(_field(form, "price_weight")),
+                "price_exclude" in form,
+            )
+            return profile_edit.set_numeric(
+                p,
+                "miles",
+                float(_field(form, "miles_ideal")),
+                float(_field(form, "miles_hard")),
+                float(_field(form, "miles_weight")),
+                "miles_exclude" in form,
+            )
+
+        return _apply_and_save(model_key, mutate)
+
+    @app.post("/config/{model_key}/colors")
+    async def config_colors(request: Request, model_key: str):
+        form = await _form(request)
+        preferred = form.get("preferred", [])
+        penalized = [v for v in form.get("penalized", []) if v not in preferred]
+        weight = float(_field(form, "color_weight", "0.1"))
+        return _apply_and_save(
+            model_key, lambda p: profile_edit.set_colors(p, preferred, penalized, weight)
+        )
+
+    @app.post("/config/{model_key}/remove")
+    async def config_remove(request: Request, model_key: str):
+        form = await _form(request)
+        kind = _field(form, "kind")
+        ident = _field(form, "ident")
+
+        def mutate(p):
+            if kind == "hard":
+                return profile_edit.remove_hard(p, ident)
+            if kind == "highlight":
+                return profile_edit.remove_highlight(p, ident)
+            raise ProfileError(f"unknown remove kind {kind!r}")
+
+        return _apply_and_save(model_key, mutate)
 
     @app.post("/dismiss/{vin}")
     def dismiss(vin: str, next: str = "/"):

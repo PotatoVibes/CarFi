@@ -16,10 +16,11 @@ services:
       CARFINDER_CONFIG_DIR: /config
     volumes:
       # Persistent state + the profiles you can hot-edit. stickers is a cache
-      # of GM PDFs; data holds the SQLite DB.
+      # of GM PDFs; data holds the SQLite DB. config is writable so the
+      # in-app profile editor (/config) can save changes.
       - ./data:/data
       - ./stickers:/stickers
-      - ./config:/config:ro
+      - ./config:/config
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"]

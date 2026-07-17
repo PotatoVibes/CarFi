@@ -26,3 +26,5 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+config/*.yaml.bak
