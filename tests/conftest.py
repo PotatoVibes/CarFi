@@ -149,6 +149,12 @@ def seeded_settings(tmp_path) -> Settings:
         price=61000,
         first_seen="2026-07-20T00:00:00Z",
     )
+    # Seller + location on the ranked car (Austin is ~130 mi from 77498).
+    conn.execute(
+        "UPDATE vehicles SET dealer='Example Motors of Austin', city='Austin', "
+        "state='TX', zip='78701' WHERE vin=?",
+        (BW_VIN,),
+    )
     # A conflict + price history on the ranked car.
     from datetime import UTC, datetime
 

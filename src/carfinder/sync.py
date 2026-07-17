@@ -145,10 +145,13 @@ class SyncEngine:
         ).fetchone()[0]
         exists = self._conn.execute("SELECT 1 FROM vehicles WHERE vin = ?", (row.vin,)).fetchone()
         if exists:
-            # Seeing the VIN again resets delist bookkeeping.
+            # Seeing the VIN again resets delist bookkeeping. COALESCE keeps
+            # known seller/location when a source omits them on a later page.
             self._conn.execute(
                 """UPDATE vehicles SET model_key=?, year=?, make=?, model=?, trim=?,
-                   color=?, miles=?, price=?, status='active', missing_passes=0, last_seen=?
+                   color=?, miles=?, price=?, dealer=COALESCE(?, dealer),
+                   city=COALESCE(?, city), state=COALESCE(?, state), zip=COALESCE(?, zip),
+                   status='active', missing_passes=0, last_seen=?
                    WHERE vin=?""",
                 (
                     model_key,
@@ -159,6 +162,10 @@ class SyncEngine:
                     row.color,
                     row.miles,
                     best,
+                    row.dealer,
+                    row.city,
+                    row.state,
+                    row.zip,
                     ts,
                     row.vin,
                 ),
@@ -167,8 +174,8 @@ class SyncEngine:
             self._conn.execute(
                 """INSERT INTO vehicles
                    (vin, model_key, year, make, model, trim, color, miles, price,
-                    status, missing_passes, first_seen, last_seen)
-                   VALUES (?,?,?,?,?,?,?,?,?, 'active', 0, ?, ?)""",
+                    dealer, city, state, zip, status, missing_passes, first_seen, last_seen)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', 0, ?, ?)""",
                 (
                     row.vin,
                     model_key,
@@ -179,10 +186,21 @@ class SyncEngine:
                     row.color,
                     row.miles,
                     best,
+                    row.dealer,
+                    row.city,
+                    row.state,
+                    row.zip,
                     ts,
                     ts,
                 ),
             )
+
+    def upsert(self, row: ListingRow, model_key: str) -> str:
+        """Ingest one listing outside a page walk (single-car refresh).
+        Returns 'new' | 'price_change' | 'unchanged'; commits."""
+        status = self._upsert_row(row, model_key, _iso(self._now()))
+        self._conn.commit()
+        return status
 
     # -- delist detection (full pass only) -----------------------------------
 

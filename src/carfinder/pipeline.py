@@ -92,6 +92,7 @@ class Pipeline:
         self._buildsheet = buildsheet_fetcher
         self._max_buildsheets = max_buildsheets_per_run
         # rescore() needs no source; run() does (guarded).
+        self._source = source
         self._engine = SyncEngine(conn, source, now=now) if source is not None else None
         self._current_year = current_year
         self._now = now or (lambda: datetime.now(UTC))
@@ -99,6 +100,36 @@ class Pipeline:
         self._extractor = extractor
         self._notifier = notifier
         self._notify_threshold = notify_threshold
+        # When True, per-VIN writes skip their own commit; the scoring loop
+        # commits every _COMMIT_EVERY cars instead. Cuts a full rescore's
+        # fsync count from ~2/car to ~1/25 cars — the dominant cost at rest.
+        self._defer_commits = False
+
+    _COMMIT_EVERY = 25
+
+    def _score_batch(
+        self,
+        vins: list[str],
+        profile: Profile,
+        attributes,
+        run_id: str,
+        stats: PipelineStats,
+        progress: Callable[[str], None] | None,
+        verb: str = "scoring",
+    ) -> None:
+        """Score a list of VINs with batched commits (see _defer_commits)."""
+        started = time.monotonic()
+        self._defer_commits = True
+        try:
+            for i, vin in enumerate(vins, 1):
+                if progress is not None:
+                    progress(f"{verb} {i}/{len(vins)} — {vin}{_eta(started, i - 1, len(vins))}")
+                self._process_vin(vin, profile, attributes, run_id, stats)
+                if i % self._COMMIT_EVERY == 0:
+                    self._conn.commit()
+        finally:
+            self._defer_commits = False
+            self._conn.commit()
 
     def run(
         self,
@@ -125,11 +156,7 @@ class Pipeline:
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
         todo = list(dict.fromkeys(sync_stats.new_or_changed))  # de-dupe, keep order
-        started = time.monotonic()
-        for i, vin in enumerate(todo, 1):
-            if progress is not None:
-                progress(f"scoring {i}/{len(todo)} — {vin}{_eta(started, i - 1, len(todo))}")
-            self._process_vin(vin, profile, attributes, sync_stats.run_id, stats)
+        self._score_batch(todo, profile, attributes, sync_stats.run_id, stats, progress)
 
         if stats.sticker_capped:
             log.warning(
@@ -166,12 +193,59 @@ class Pipeline:
                 (profile.model_key,),
             ).fetchall()
         ]
-        started = time.monotonic()
-        for i, vin in enumerate(vins, 1):
-            if progress is not None:
-                progress(f"re-scoring {i}/{len(vins)} — {vin}{_eta(started, i - 1, len(vins))}")
-            self._process_vin(vin, profile, attributes, run_id, stats)
+        self._score_batch(vins, profile, attributes, run_id, stats, progress, verb="re-scoring")
         return stats
+
+    def refresh_vin(
+        self,
+        vin: str,
+        profile: Profile,
+        progress: Callable[[str], None] | None = None,
+    ) -> str:
+        """Refresh ONE car: refetch its listing (a single Auto.dev call),
+        re-verify from caches (sticker/build sheet/AI), and rescore it.
+
+        A 404 from the per-VIN endpoint means Auto.dev no longer has an active
+        listing — the car is marked presumed_sold (reversible: any later sync
+        that sees the VIN flips it back to active). Returns a summary line.
+        """
+        if self._engine is None or self._source is None:
+            raise ValueError("refresh_vin() needs a listing source; none was configured")
+        vin = vin.upper()
+        run_id = f"refresh-{uuid4().hex[:8]}"
+        if progress is not None:
+            progress(f"fetching listing for {vin}")
+        try:
+            listing = self._source.get_listing(vin, run_id=run_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            listing = None
+
+        if listing is not None and listing.vin == vin:
+            change = self._engine.upsert(listing, profile.model_key)
+            fetched = {"new": "listing refetched", "price_change": "price changed"}.get(
+                change, "listing unchanged"
+            )
+        else:
+            self._conn.execute("UPDATE vehicles SET status='presumed_sold' WHERE vin=?", (vin,))
+            self._conn.commit()
+            fetched = "no active listing — marked presumed sold"
+
+        if progress is not None:
+            progress(f"re-scoring {vin}")
+        stats = PipelineStats(sync=SyncStats(run_id=run_id, mode="refresh"))
+        attributes = _profile_attributes(profile) if self._extractor is not None else []
+        self._process_vin(vin, profile, attributes, run_id, stats)
+        result = self._conn.execute(
+            "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
+        ).fetchone()
+        verdict = (
+            f"{result['verdict'].replace('_', ' ')} at {result['total']:.0f}"
+            if result
+            else "scored"
+        )
+        return f"{vin}: {fetched} · {verdict}"
 
     def _sync_full_segmented(self, params, profile, run_id, progress) -> SyncStats:
         """One full walk per model year, merged; delist runs once on the union.
@@ -469,7 +543,7 @@ class Pipeline:
             (c.field, c.winner, json.dumps(c.values, separators=(",", ":")))
             for c in result.conflicts
         ]
-        db.replace_conflicts(self._conn, vin, rows, self._now())
+        db.replace_conflicts(self._conn, vin, rows, self._now(), commit=not self._defer_commits)
 
     def _persist(self, vin: str, model_key: str, result) -> None:
         breakdown = {
@@ -498,7 +572,8 @@ class Pipeline:
                 self._now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             ),
         )
-        self._conn.commit()
+        if not self._defer_commits:
+            self._conn.commit()
 
 
 def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pipeline:

@@ -38,6 +38,10 @@ class ListingRow:
     color: str | None = None
     created_at: str | None = None
     url: str | None = None
+    dealer: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -98,6 +102,11 @@ def _as_float(v: Any) -> float | None:
         return None
 
 
+def _as_str(v: Any) -> str | None:
+    s = str(v).strip() if v is not None else ""
+    return s or None
+
+
 def _as_url(v: Any) -> str | None:
     """Absolute http(s) URLs only. Auto.dev sometimes sends junk fragments
     like '#-4976296983083547062' as retailListing.vdp — rendering those as a
@@ -129,6 +138,10 @@ def normalize(item: dict[str, Any], source: str) -> ListingRow:
         ),
         created_at=_first(item, "createdAt", "created_at"),
         url=_as_url(_first(item, "retailListing.vdp", "retailListing.vdpUrl", "url")),
+        dealer=_as_str(_first(item, "retailListing.dealer", "dealer")),
+        city=_as_str(_first(item, "retailListing.city", "city")),
+        state=_as_str(_first(item, "retailListing.state", "state")),
+        zip=_as_str(_first(item, "retailListing.zip", "zip")),
         raw=item,
     )
 

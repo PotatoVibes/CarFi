@@ -742,3 +742,56 @@ def test_sticker_cap_scores_on_listing_only():
     assert stats.stickers_fetched == 0
     # Still scored (on listing data) and persisted.
     assert _match(conn, vin) is not None
+
+
+# --- single-car refresh ------------------------------------------------------
+
+
+def _bw_row(price=58000, **kw):
+    return ListingRow(
+        vin=BW_VIN,
+        source="autodev",
+        price=price,
+        miles=30000,
+        year=2022,
+        make="Cadillac",
+        model="CT4-V",
+        trim="V-Series Blackwing",
+        **kw,
+    )
+
+
+def test_refresh_vin_updates_price_location_and_rescores():
+    pipe, conn = _pipeline([_bw_row()])
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+
+    fetched = _bw_row(price=54000, dealer="Sewell Cadillac", city="Dallas", state="TX", zip="75201")
+    pipe._engine._source.get_listing = lambda vin, run_id=None: fetched
+    summary = pipe.refresh_vin(BW_VIN, bw)
+    assert BW_VIN in summary and "price changed" in summary and "ranked" in summary
+    v = conn.execute(
+        "SELECT price, dealer, city, state, zip, status FROM vehicles WHERE vin=?", (BW_VIN,)
+    ).fetchone()
+    assert tuple(v) == (54000, "Sewell Cadillac", "Dallas", "TX", "75201", "active")
+    assert _match(conn, BW_VIN)["verdict"] == "ranked"
+
+
+def test_refresh_vin_404_marks_presumed_sold():
+    pipe, conn = _pipeline([_bw_row()])
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    pipe.run(bw, run_id="r1")
+
+    def gone(vin, run_id=None):
+        req = httpx.Request("GET", f"http://api/listings/{vin}")
+        raise httpx.HTTPStatusError(
+            "not found", request=req, response=httpx.Response(404, request=req)
+        )
+
+    pipe._engine._source.get_listing = gone
+    summary = pipe.refresh_vin(BW_VIN, bw)
+    assert "presumed sold" in summary
+    v = conn.execute("SELECT status FROM vehicles WHERE vin=?", (BW_VIN,)).fetchone()
+    assert v["status"] == "presumed_sold"
+    # Still (re)scored — the match row survives for the UI.
+    assert _match(conn, BW_VIN) is not None

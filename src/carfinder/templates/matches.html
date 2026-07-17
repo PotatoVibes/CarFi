@@ -50,6 +50,7 @@
       <th data-key="miles" data-num>Miles</th>
       <th data-key="price" data-num>Price</th>
       <th data-key="bonus" data-num>Bonus</th>
+      <th data-key="dist" data-num>Location</th>
       <th data-key="sticker">Sticker</th>
       <th data-key="vin">VIN</th>
       <th></th>
@@ -62,7 +63,8 @@
         data-color="{{ (r.color or '')|lower }}" data-miles="{{ r.miles if r.miles is not none else -1 }}"
         data-price="{{ r.price if r.price is not none else -1 }}" data-bonus="{{ r.highlight_bonus }}"
         data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}"
-        data-fav="{{ '1' if r.favorited else '' }}">
+        data-fav="{{ '1' if r.favorited else '' }}"
+        data-dist="{{ r.distance_mi if r.distance_mi is not none else 99999 }}">
       <td class="score">{{ "%.0f"|format(r.total) }}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
@@ -74,6 +76,10 @@
       <td>{{ "{:,}".format(r.miles) if r.miles is not none else "?" }}</td>
       <td>{{ "${:,.0f}".format(r.price) if r.price is not none else "?" }}</td>
       <td class="muted">{% if r.highlight_bonus %}+{{ "%.0f"|format(r.highlight_bonus) }}{% endif %}</td>
+      <td style="white-space:nowrap">{% if r.location %}{{ r.location }}
+          {% if r.distance_mi is not none %}<span class="muted" style="font-size:12px">
+            · {{ "{:,}".format(r.distance_mi) }} mi</span>{% endif %}
+          {% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{% if r.sticker_status == "found" %}<span class="badge verified">✓</span>
           {% else %}<span class="muted">{{ r.sticker_status or "—" }}</span>{% endif %}</td>
       <td><a class="muted" style="font-size:12px; font-family:ui-monospace, monospace"
@@ -96,7 +102,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="11" class="muted">No matches yet.</td></tr>
+    <tr><td colspan="12" class="muted">No matches yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -143,7 +149,9 @@
     document.querySelectorAll("#matches th[data-key]").forEach(function (th) {
       th.addEventListener("click", function () {
         const key = th.dataset.key;
-        asc = sortKey === key ? !asc : false;  // first click: descending
+        // First click: descending, except distance (nearest first is what
+        // you want when scanning for a drivable car).
+        asc = sortKey === key ? !asc : key === "dist";
         sortKey = key;
         const num = th.hasAttribute("data-num");
         rows.sort(function (a, b) {

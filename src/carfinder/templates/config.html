@@ -14,28 +14,32 @@
   the previous file is kept as <code>.bak</code>, and edits apply to newly synced cars
   immediately — hit <b>Rescore</b> on the home page to re-rank the cars you already have.</p>
 
-<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr))">
-  <div class="card">
+<!-- min(100%, 460px) keeps each card wide enough for the 4-column bounds
+     table (no clipped inputs) while still collapsing cleanly on narrow
+     screens; the tighter cell padding keeps the table inside the card. -->
+<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr))">
+  <div class="card" style="overflow-x:auto">
     <h2 style="margin-top:0">Bounds</h2>
     <form method="post" action="/config/{{ profile.model_key }}/bounds">
-      <table><tbody>
-        <tr><td>Year floor</td>
+      <table style="width:auto"><tbody>
+        <tr><td style="white-space:nowrap">Year floor</td>
           <td><input name="year_min" type="number" value="{{ year.min_year if year else 2020 }}"
-                     min="2014" max="2027" required style="width:90px"></td>
-          <td class="muted" colspan="2">older cars are excluded</td></tr>
-        <tr><th></th><th class="muted">ideal (100 pts)</th><th class="muted">hard (0 pts)</th>
+                     min="2014" max="2027" required style="width:80px"></td>
+          <td class="muted" colspan="2" style="white-space:nowrap">older cars are excluded</td></tr>
+        <tr><th></th><th class="muted" style="white-space:nowrap">ideal (100 pts)</th>
+            <th class="muted" style="white-space:nowrap">hard (0 pts)</th>
             <th class="muted">weight</th></tr>
-        <tr><td>Price $</td>
-          <td><input name="price_ideal" type="number" value="{{ price.ideal|int if price else 60000 }}" required style="width:100px"></td>
-          <td><input name="price_hard" type="number" value="{{ price.hard|int if price else 70000 }}" required style="width:100px"></td>
-          <td><input name="price_weight" type="number" step="0.05" value="{{ price.weight if price else 0.25 }}" required style="width:70px"></td></tr>
+        <tr><td style="white-space:nowrap">Price $</td>
+          <td><input name="price_ideal" type="number" value="{{ price.ideal|int if price else 60000 }}" required style="width:92px"></td>
+          <td><input name="price_hard" type="number" value="{{ price.hard|int if price else 70000 }}" required style="width:92px"></td>
+          <td><input name="price_weight" type="number" step="0.05" value="{{ price.weight if price else 0.25 }}" required style="width:62px"></td></tr>
         <tr><td></td><td colspan="3"><label class="muted">
           <input type="checkbox" name="price_exclude" {% if price and price.exclude_beyond_hard %}checked{% endif %}>
           exclude cars asking above the hard price (still tracked for drops)</label></td></tr>
         <tr><td>Miles</td>
-          <td><input name="miles_ideal" type="number" value="{{ miles.ideal|int if miles else 40000 }}" required style="width:100px"></td>
-          <td><input name="miles_hard" type="number" value="{{ miles.hard|int if miles else 60000 }}" required style="width:100px"></td>
-          <td><input name="miles_weight" type="number" step="0.05" value="{{ miles.weight if miles else 0.20 }}" required style="width:70px"></td></tr>
+          <td><input name="miles_ideal" type="number" value="{{ miles.ideal|int if miles else 40000 }}" required style="width:92px"></td>
+          <td><input name="miles_hard" type="number" value="{{ miles.hard|int if miles else 60000 }}" required style="width:92px"></td>
+          <td><input name="miles_weight" type="number" step="0.05" value="{{ miles.weight if miles else 0.20 }}" required style="width:62px"></td></tr>
         <tr><td></td><td colspan="3"><label class="muted">
           <input type="checkbox" name="miles_exclude" {% if miles and miles.exclude_beyond_hard %}checked{% endif %}>
           exclude cars above the hard mileage</label></td></tr>

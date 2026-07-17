@@ -185,6 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 include_excluded=show_excluded,
                 since=since,
                 include_dismissed=show_dismissed,
+                home_zip=settings.home_zip,
             )
             counts = store.match_counts(c, model_key)
         finally:
@@ -209,7 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def detail(request: Request, vin: str):
         c = conn()
         try:
-            det = store.vehicle_detail(c, vin)
+            det = store.vehicle_detail(c, vin, home_zip=settings.home_zip)
         finally:
             c.close()
         if det is None:
@@ -218,7 +219,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _TEMPLATES.TemplateResponse(
             request,
             "detail.html",
-            {"d": det, "chip_hex": colors.chip_hex, "sticker_pdf": sticker_pdf},
+            {
+                "d": det,
+                "chip_hex": colors.chip_hex,
+                "sticker_pdf": sticker_pdf,
+                "home_zip": settings.home_zip,
+                "has_autodev_key": bool(settings.autodev_api_key),
+            },
         )
 
     @app.get("/budget", response_class=HTMLResponse)
@@ -485,6 +492,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/sync/full")
     def sync_full():
         return _start_sync("full", "full pass")
+
+    @app.post("/refresh/{vin}")
+    def refresh_one(vin: str):
+        """Refresh a single car — one Auto.dev call + a rescore of that VIN."""
+        vin = vin.upper()
+        c = conn()
+        try:
+            v = c.execute("SELECT model_key FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+        finally:
+            c.close()
+        if v is None:
+            return HTMLResponse("Unknown VIN", status_code=404)
+        profile = app.state.profiles_by_key.get(v["model_key"])
+        if profile is None:
+            return _flash_redirect(f"No profile loaded for {v['model_key']!r}.")
+        if not settings.autodev_api_key:
+            return _flash_redirect("Refresh needs AUTODEV_API_KEY in .env — no key found.")
+
+        def work(progress):
+            from .pipeline import build_pipeline
+
+            c2 = bootstrap(settings.db_path)
+            try:
+                pipeline = build_pipeline(c2, settings, datetime.now(UTC).year)
+                return pipeline.refresh_vin(vin, profile, progress=progress)
+            finally:
+                c2.close()
+
+        if not _start_job("refresh", work):
+            return _flash_redirect("A job is already running — wait for it to finish.")
+        return RedirectResponse(f"/v/{vin}", status_code=303)
 
     @app.post("/rescore")
     def rescore_now():

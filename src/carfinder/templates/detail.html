@@ -4,7 +4,11 @@
 {% block content %}
 <p style="display:flex; align-items:center; gap:10px">
   <a href="/m/{{ v.model_key }}">← back to matches</a>
-  <form method="post" action="/favorite/{{ v.vin }}?next=/v/{{ v.vin }}" style="margin-left:auto">
+  <form method="post" action="/refresh/{{ v.vin }}" data-job style="margin-left:auto"
+        title="Refetch this car's listing (one API call) and re-score it">
+    <button type="submit" class="secondary">⟳ Refresh this car</button>
+  </form>
+  <form method="post" action="/favorite/{{ v.vin }}?next=/v/{{ v.vin }}">
     <button type="submit" class="secondary"
             {% if v.get("favorited_at") %}style="color:#e08a8a"{% endif %}>
       {{ "♥ Favorited" if v.get("favorited_at") else "♡ Favorite" }}
@@ -41,6 +45,16 @@
   {% if v.price is not none %}${{ "{:,.0f}".format(v.price) }}{% endif %}
   {% if d.listing_url %}· <a href="{{ d.listing_url }}" target="_blank" rel="noopener">view listing ↗</a>{% endif %}
   {% if sticker_pdf %}· <a href="/sticker/{{ v.vin }}" target="_blank" rel="noopener">window sticker (PDF)</a>{% endif %}
+</p>
+
+<p class="muted">
+  📍 {% if v.get("city") %}{{ v.city }}{% if v.get("state") %}, {{ v.state }}{% endif %}
+     {% if v.get("zip") %} {{ v.zip }}{% endif %}
+     {% if d.distance_mi is not none %} · {{ "{:,}".format(d.distance_mi) }} mi from {{ home_zip }}{% endif %}
+  {% elif v.get("state") %}{{ v.state }}
+     {% if d.distance_mi is not none %} · {{ "{:,}".format(d.distance_mi) }} mi from {{ home_zip }}{% endif %}
+  {% else %}location unknown <span style="font-size:12px">(refresh this car or run a full pass to fill it in)</span>{% endif %}
+  &nbsp;·&nbsp; 🏷 seller: {% if v.get("dealer") %}{{ v.dealer }}{% else %}unknown (private sale or unlisted dealer){% endif %}
 </p>
 
 <h2>Hard requirements</h2>

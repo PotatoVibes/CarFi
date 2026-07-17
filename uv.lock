@@ -59,6 +59,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "typer" },
     { name = "uvicorn" },
+    { name = "zipcodes" },
 ]
 
 [package.dev-dependencies]
@@ -80,6 +81,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", specifier = ">=0.30" },
+    { name = "zipcodes", specifier = ">=1.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -751,4 +753,17 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/d9/b477fddb68840b570af8b22afe9b035cbc277b5fb7b33dea390617a8b10f/virtualenv-21.6.1.tar.gz", hash = "sha256:15f978b7cd329f24855ff4a0c4b4899cc7678589f49adbdcbbb4d3232e641128", size = 5526620, upload-time = "2026-07-10T19:33:53.312Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/7c/4e7225d46d634a0d8d534dd8a6ce0c319d09b4d0cf0337eb314ca4789d8c/virtualenv-21.6.1-py3-none-any.whl", hash = "sha256:afe991df855715a2b2f60edfcc0107ef95a79fdfd8cb4cdaa71603d1c12e463b", size = 5506392, upload-time = "2026-07-10T19:33:51.629Z" },
+]
+
+[[package]]
+name = "zipcodes"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/a6/4f0b4666c54eccffe057124b63e4385b80598dd94a967d6d5eb0a6363ae7/zipcodes-3.0.0.tar.gz", hash = "sha256:9a9426527f1288d334444a4de7d1960d9f6670bb26b843b274234fcf95ce4497", size = 734493, upload-time = "2026-06-14T19:15:04.83Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/0c/5c001eb2ee68cd143d57e2c23f47bc6eb88ed8bb8bd73876bd0541c626d3/zipcodes-3.0.0-cp39-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:70b1d5687930c186c883ef1c05cf76c3d05a68191162e2f3f47a132dc81571a7", size = 2032980, upload-time = "2026-06-14T19:14:57.465Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/6b/4ef5c0a557c042c18d87bcb8a00708083c9ab4d3d5660bc911134a9ef6bd/zipcodes-3.0.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6cb450f427d5568530e4c6a6a497c0d572eaacc987c6f75f8a92b206d6056280", size = 1031320, upload-time = "2026-06-14T19:14:59.025Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/0d/46a183b1c500f81d3013c423557a469b1a3daf2a08627f71fc718a9b94a0/zipcodes-3.0.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:862d8f6b6b82b50f5268ae2651cf08af1892526ea929fbe658d3872ebe395b1a", size = 1039810, upload-time = "2026-06-14T19:15:00.541Z" },
+    { url = "https://files.pythonhosted.org/packages/33/75/225120a686fb32df12719f1cdf363b701a0471507960f2393933677c3224/zipcodes-3.0.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:2f2ce64cd478f753ac9cda90095889e25b6f66cc3b1ebc0f30809d87e40d19a6", size = 1250571, upload-time = "2026-06-14T19:15:01.882Z" },
+    { url = "https://files.pythonhosted.org/packages/37/a0/9ab7dc8b1884141de27cc9677b25e98061eb5b46e9a2eabc3e748765e8b4/zipcodes-3.0.0-cp39-abi3-win_amd64.whl", hash = "sha256:57e61aa5182aaeec2a1f44af3d0358c54c0495aaa0c08f8aebb022c94aed5682", size = 930228, upload-time = "2026-06-14T19:15:03.291Z" },
 ]

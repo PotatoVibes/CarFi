@@ -205,6 +205,25 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE vehicles ADD COLUMN favorited_at TEXT;
         """,
     ),
+    (
+        10,
+        """
+        -- Seller + location, denormalized from the newest listing for display.
+        -- Dealer is backfilled from raw_json (it was always in the projection);
+        -- city/state/zip populate as syncs/refreshes see each listing again.
+        ALTER TABLE vehicles ADD COLUMN dealer TEXT;
+        ALTER TABLE vehicles ADD COLUMN city TEXT;
+        ALTER TABLE vehicles ADD COLUMN state TEXT;
+        ALTER TABLE vehicles ADD COLUMN zip TEXT;
+        UPDATE vehicles SET dealer = (
+            SELECT COALESCE(
+                json_extract(l.raw_json, '$."retailListing.dealer"'),
+                json_extract(l.raw_json, '$.retailListing.dealer'))
+            FROM listings l WHERE l.vin = vehicles.vin
+            ORDER BY l.last_seen DESC LIMIT 1
+        );
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -216,6 +235,9 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # Scoring loops batch many rows per transaction; give concurrent UI reads
+    # a grace window instead of an instant "database is locked".
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
@@ -335,16 +357,19 @@ def replace_conflicts(
     vin: str,
     rows: list[tuple[str, str, str]],
     ts: datetime,
+    commit: bool = True,
 ) -> None:
     """Replace all conflicts for a VIN (delete-then-insert) so re-runs are
-    idempotent. Each row is (field, winner, values_json)."""
+    idempotent. Each row is (field, winner, values_json). commit=False lets a
+    bulk scoring loop batch many VINs into one fsync."""
     conn.execute("DELETE FROM conflicts WHERE vin = ?", (vin,))
     conn.executemany(
         "INSERT INTO conflicts (vin, field, winner, values_json, detected_at) "
         "VALUES (?, ?, ?, ?, ?)",
         [(vin, field, winner, values_json, _iso(ts)) for field, winner, values_json in rows],
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def get_ai_cache(conn: sqlite3.Connection, cache_key: str) -> sqlite3.Row | None:

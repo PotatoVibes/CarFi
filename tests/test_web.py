@@ -114,6 +114,29 @@ def test_detail_vin_links_to_google_search(seeded_settings):
     assert f"https://www.google.com/search?q={BW_VIN}" in r.text
 
 
+def test_detail_shows_seller_location_and_distance(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    assert "Example Motors of Austin" in r
+    assert "Austin, TX" in r and "78701" in r
+    assert "mi from 77498" in r  # ~130 mi, rendered with the home zip
+
+
+def test_detail_without_location_says_unknown(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{REVIEW_VIN}").text
+    assert "location unknown" in r
+    assert "unknown (private sale or unlisted dealer)" in r
+
+
+def test_matches_rows_show_location_and_distance(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert 'data-key="dist"' in r  # sortable Location column
+    assert "Austin, TX" in r
+    assert 'data-dist="99999"' not in r  # the seeded BW has a real distance
+    # Cars without a zip sink to the bottom of a distance sort.
+    r2 = _client(seeded_settings).get("/m/c8_stingray").text
+    assert 'data-dist="99999"' in r2
+
+
 def test_sync_now_without_key_flashes(seeded_settings):
     r = _client(seeded_settings).post("/sync", follow_redirects=False)
     assert r.status_code == 303
@@ -127,6 +150,22 @@ def test_full_sync_without_key_flashes(seeded_settings):
     r = _client(seeded_settings).post("/sync/full", follow_redirects=False)
     assert r.status_code == 303
     assert "flash=" in r.headers["location"]
+
+
+def test_refresh_one_without_key_flashes(seeded_settings):
+    r = _client(seeded_settings).post(f"/refresh/{BW_VIN}", follow_redirects=False)
+    assert r.status_code == 303
+    assert "flash=" in r.headers["location"]
+
+
+def test_refresh_unknown_vin_404(seeded_settings):
+    assert _client(seeded_settings).post("/refresh/NOPE", follow_redirects=False).status_code == 404
+
+
+def test_detail_has_refresh_button(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    assert f"/refresh/{BW_VIN}" in r
+    assert "Refresh this car" in r
 
 
 def test_dismiss_hides_car_and_restore_brings_it_back(seeded_settings):

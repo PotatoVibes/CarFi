@@ -44,6 +44,8 @@ class Settings:
     config_dir: Path
     notify_webhook_url: str | None
     notify_threshold: float
+    # Distances on the UI are measured from here (zip centroid).
+    home_zip: str = "77498"
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -64,4 +66,5 @@ def load_settings(env_file: Path | None = None) -> Settings:
         config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR") or "config"),
         notify_webhook_url=os.environ.get("NOTIFY_WEBHOOK_URL") or None,
         notify_threshold=float(os.environ.get("NOTIFY_THRESHOLD") or "85"),
+        home_zip=os.environ.get("CARFINDER_HOME_ZIP") or "77498",
     )

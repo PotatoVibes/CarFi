@@ -77,6 +77,34 @@ def test_normalize_missing_fields_are_none():
     assert row.price is None and row.miles is None and row.color is None
 
 
+def test_normalize_captures_seller_and_location():
+    # Flat (search projection) shape.
+    flat = normalize(
+        {
+            "vehicle.vin": "V",
+            "retailListing.dealer": "Van Hyundai",
+            "retailListing.city": "Carrollton",
+            "retailListing.state": "TX",
+            "retailListing.zip": 75006,  # numbers coerce to strings
+        },
+        "autodev",
+    )
+    assert flat.dealer == "Van Hyundai"
+    assert flat.city == "Carrollton" and flat.state == "TX" and flat.zip == "75006"
+    # Nested (single-listing endpoint) shape.
+    nested = normalize(
+        {
+            "vehicle": {"vin": "V"},
+            "retailListing": {"dealer": "Carvana", "city": "Miami", "state": "FL", "zip": "33132"},
+        },
+        "autodev",
+    )
+    assert nested.dealer == "Carvana" and nested.zip == "33132"
+    # Absent -> None, not "".
+    empty = normalize({"vehicle.vin": "V", "retailListing.dealer": ""}, "autodev")
+    assert empty.dealer is None and empty.city is None and empty.zip is None
+
+
 def test_normalize_rejects_junk_fragment_urls():
     # Auto.dev sends fragments like '#-4976296983083547062' as vdp for some
     # rows — rendering those as links just re-anchors the current page.

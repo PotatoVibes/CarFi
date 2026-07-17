@@ -28,6 +28,9 @@ SELECT_FIELDS = (
     "vehicle.exteriorColor",
     "retailListing.price",
     "retailListing.dealer",
+    "retailListing.city",
+    "retailListing.state",
+    "retailListing.zip",
     "retailListing.vdp",
     "createdAt",
 )

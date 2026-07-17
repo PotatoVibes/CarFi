@@ -9,6 +9,8 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import geo
+
 # Verdict ordering for ranked lists: ranked cars first, then needs-review,
 # then excluded (usually hidden). Higher total breaks ties within a verdict.
 _VERDICT_RANK = {"ranked": 0, "needs_review": 1, "excluded": 2}
@@ -35,6 +37,15 @@ class MatchRow:
     is_new: bool = False
     dismissed: bool = False
     favorited: bool = False
+    city: str | None = None
+    state: str | None = None
+    distance_mi: int | None = None  # from the configured home zip
+
+    @property
+    def location(self) -> str | None:
+        if self.city and self.state:
+            return f"{self.city}, {self.state}"
+        return self.state or None
 
 
 def ranked_matches(
@@ -43,16 +54,18 @@ def ranked_matches(
     include_excluded: bool = False,
     since: str | None = None,
     include_dismissed: bool = False,
+    home_zip: str | None = None,
 ) -> list[MatchRow]:
     """Ranked matches for a model. Excluded and manually-dismissed cars are
     hidden unless requested. Rows with first_seen > `since` are flagged is_new
-    (for 'new since visit')."""
+    (for 'new since visit'). With `home_zip`, distance_mi is computed from it
+    to each car's listing zip (centroid-to-centroid, offline)."""
     rows = conn.execute(
         """
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
                v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at,
-               v.favorited_at
+               v.favorited_at, v.city, v.state, v.zip
         FROM match_results m
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
@@ -82,6 +95,9 @@ def ranked_matches(
             is_new=bool(since and r["first_seen"] and r["first_seen"] > since),
             dismissed=bool(r["dismissed_at"]),
             favorited=bool(r["favorited_at"]),
+            city=r["city"],
+            state=r["state"],
+            distance_mi=geo.zip_distance_miles(home_zip, r["zip"]) if home_zip else None,
         )
         for r in rows
     ]
@@ -106,9 +122,12 @@ class VehicleDetail:
     conflicts: list[dict[str, Any]] = field(default_factory=list)
     price_history: list[dict[str, Any]] = field(default_factory=list)
     listing_url: str | None = None
+    distance_mi: int | None = None  # from the configured home zip
 
 
-def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
+def vehicle_detail(
+    conn: sqlite3.Connection, vin: str, home_zip: str | None = None
+) -> VehicleDetail | None:
     v = conn.execute("SELECT * FROM vehicles WHERE vin = ?", (vin,)).fetchone()
     if v is None:
         return None
@@ -141,6 +160,7 @@ def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
         conflicts=conflicts,
         price_history=prices,
         listing_url=listing["url"] if listing else None,
+        distance_mi=geo.zip_distance_miles(home_zip, v["zip"]) if home_zip else None,
     )
 
 

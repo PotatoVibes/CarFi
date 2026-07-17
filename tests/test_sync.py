@@ -237,3 +237,33 @@ def test_sync_run_recorded():
     run = conn.execute("SELECT * FROM sync_runs WHERE run_id='r1'").fetchone()
     assert run["mode"] == "incremental" and run["new_vins"] == 1
     assert run["finished_at"] is not None and run["calls"] == 1
+
+
+def test_vehicle_stores_seller_and_location_and_keeps_them_on_sparse_updates():
+    row = _row("A", 60000)
+    row.dealer, row.city, row.state, row.zip = "Van Hyundai", "Carrollton", "TX", "75006"
+    eng, conn, src = _engine([[row]])
+    eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r1")
+    v = conn.execute("SELECT dealer, city, state, zip FROM vehicles WHERE vin='A'").fetchone()
+    assert tuple(v) == ("Van Hyundai", "Carrollton", "TX", "75006")
+    # A later sync whose payload omits location must not wipe what we know.
+    src.pages = [[_row("A", 59000)]]  # price change, no location fields
+    eng.sync(PARAMS, "c8_stingray", mode="full", run_id="r2")
+    v = conn.execute(
+        "SELECT dealer, city, state, zip, price FROM vehicles WHERE vin='A'"
+    ).fetchone()
+    assert tuple(v) == ("Van Hyundai", "Carrollton", "TX", "75006", 59000)
+
+
+def test_public_upsert_ingests_single_listing():
+    eng, conn, _ = _engine([])
+    row = _row("SOLO", 61000)
+    row.dealer, row.zip = "Carvana", "33132"
+    assert eng.upsert(row, "c8_stingray") == "new"
+    assert eng.upsert(row, "c8_stingray") == "unchanged"
+    row.price = 60000
+    assert eng.upsert(row, "c8_stingray") == "price_change"
+    v = conn.execute("SELECT dealer, zip, price FROM vehicles WHERE vin='SOLO'").fetchone()
+    assert tuple(v) == ("Carvana", "33132", 60000)
+    prices = conn.execute("SELECT COUNT(*) FROM price_history WHERE vin='SOLO'").fetchone()[0]
+    assert prices == 2  # initial + the drop

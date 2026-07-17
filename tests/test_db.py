@@ -42,3 +42,41 @@ def test_count_and_cost_scoped_to_range():
     jul_start, jul_end = datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)
     assert db.count_calls(conn, "anthropic", jul_start, jul_end) == 1
     assert db.sum_cost(conn, "anthropic", jul_start, jul_end) == 0.75
+
+
+def test_migration_10_backfills_dealer_from_raw_json():
+    """Existing rows (schema v9) with retailListing.dealer in raw_json get the
+    vehicles.dealer column populated by the migration itself."""
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    # Bring the schema up to v9 only, then seed pre-migration data.
+    conn.executescript(db._SCHEMA_VERSION_DDL)
+    for version, sql in db.MIGRATIONS:
+        if version > 9:
+            break
+        conn.executescript(sql)
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.execute(
+        """INSERT INTO listings (source, vin, raw_json, first_seen, last_seen)
+           VALUES ('autodev', 'VIN1', '{"retailListing.dealer":"Van Hyundai"}',
+                   '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')"""
+    )
+    conn.execute(
+        """INSERT INTO listings (source, vin, raw_json, first_seen, last_seen)
+           VALUES ('autodev', 'VIN2', '{"retailListing": {"dealer": "Carvana"}}',
+                   '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')"""
+    )
+    for vin in ("VIN1", "VIN2", "VIN3"):
+        conn.execute(
+            """INSERT INTO vehicles (vin, first_seen, last_seen)
+               VALUES (?, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')""",
+            (vin,),
+        )
+    conn.commit()
+    assert db.migrate(conn) == db.LATEST_VERSION
+    got = {
+        r["vin"]: r["dealer"] for r in conn.execute("SELECT vin, dealer FROM vehicles").fetchall()
+    }
+    assert got == {"VIN1": "Van Hyundai", "VIN2": "Carvana", "VIN3": None}
