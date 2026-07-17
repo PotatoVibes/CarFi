@@ -69,7 +69,7 @@ _CT4V_PAINT: dict[str, ColorFamily] = {
     "GNL": ColorFamily.silver,  # Radiant Silver    # VERIFY
     # 2026-07-16 corpus audit (sticker exterior line x paint G-code, all
     # VERIFIED): the earlier GLK "Rift" and G1K "Wave" guesses were wrong.
-    "GRW": ColorFamily.silver,  # Rift Metallic (listing feeds say Silver)
+    "GRW": ColorFamily.white,  # Rift Metallic (owner's call: white, not silver)
     "GAI": ColorFamily.blue,  # Deep Space Metallic (dark navy)
     "GAE": ColorFamily.gray,  # Drift Metallic
     "GNW": ColorFamily.black,  # Maverick Noir Frost (matte black)
@@ -90,7 +90,7 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("CARBON FLASH", ColorFamily.black),
     # GM marketing names that carry no family word (2026-07-16 corpus audit).
     ("DEEP SPACE", ColorFamily.blue),
-    ("RIFT METALLIC", ColorFamily.silver),
+    ("RIFT METALLIC", ColorFamily.white),
     ("DRIFT METALLIC", ColorFamily.gray),
     ("TYPHOON", ColorFamily.gray),
     ("MAVERICK NOIR", ColorFamily.black),

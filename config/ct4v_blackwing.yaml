@@ -159,7 +159,7 @@ highlights:
     - 5CS
     sticker_text: null
 - label: Interior Trim Pkg Wrapped Suede
-  bonus: 3.0
+  bonus: 1.0
   matcher:
     vin_attr: null
     vin_any: []

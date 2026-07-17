@@ -229,7 +229,11 @@ def _evaluate_color(c: SoftConstraint, vehicle: Vehicle, model_key: str) -> _Sof
         score = 0.0
     else:
         score = c.neutral_score
-    return _SoftEval(_soft_result(c, "scored", prov, f"{name} -> {score:.0f}", score), False)
+    # Show the actual paint name next to the family when it adds information:
+    # "white (Rift Metallic) -> 0", but never "white (White) -> 100".
+    paint = (vehicle.color_text or "").strip()
+    label = f"{name} ({paint.title()})" if paint and paint.lower() != name else name
+    return _SoftEval(_soft_result(c, "scored", prov, f"{label} -> {score:.0f}", score), False)
 
 
 # --- Highlights ------------------------------------------------------------

@@ -159,6 +159,32 @@ def test_penalized_color_scores_zero():
     assert next(s for s in r.soft if s.key == "color").dim_score == pytest.approx(0.0)
 
 
+def test_color_detail_includes_paint_name_when_informative():
+    p = _numeric_profile()
+    # Paint name differs from the family -> shown in parens, title-cased.
+    r = score_vehicle(
+        p, Vehicle(miles=50000, price=65000, paint_rpo="GM0", color_text="ELKHART LAKE BLUE")
+    )
+    d = next(s for s in r.soft if s.key == "color").detail
+    assert d == "blue (Elkhart Lake Blue) -> 100"
+    # Paint name IS the family word -> no redundant "(White)".
+    r2 = score_vehicle(p, Vehicle(miles=50000, price=65000, color_text="White"))
+    d2 = next(s for s in r2.soft if s.key == "color").detail
+    assert d2 == "white -> 0"
+
+
+def test_rift_metallic_classifies_as_white():
+    # Owner's call (2026-07-17): Rift Metallic reads white in person, and the
+    # profile penalizes white — so a Rift car must score 0, labeled with both.
+    p = _numeric_profile()
+    r = score_vehicle(
+        p, Vehicle(miles=50000, price=65000, paint_rpo="GRW", color_text="Rift Metallic")
+    )
+    c = next(s for s in r.soft if s.key == "color")
+    assert c.dim_score == pytest.approx(0.0)
+    assert c.detail == "white (Rift Metallic) -> 0"
+
+
 # --- hard gate: verified beats claimed -------------------------------------
 
 
