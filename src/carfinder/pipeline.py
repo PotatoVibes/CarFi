@@ -80,12 +80,12 @@ class Pipeline:
         fetcher: StickerFetcher,
         current_year: int,
         now: Callable[[], datetime] | None = None,
-        max_stickers_per_run: int = 50,
+        max_stickers_per_run: int = 100,
         extractor: HaikuExtractor | None = None,
         notifier: Notifier | None = None,
         notify_threshold: float = 85.0,
         buildsheet_fetcher: BuildSheetFetcher | None = None,
-        max_buildsheets_per_run: int = 50,
+        max_buildsheets_per_run: int = 100,
     ):
         self._conn = conn
         self._fetcher = fetcher

@@ -58,6 +58,23 @@ def test_vehicle_detail_conflicts(seeded_settings):
     assert det.conflicts[0]["winner"] == "sticker"
 
 
+def test_detail_ignores_junk_fragment_urls_already_stored(seeded_settings):
+    # Rows ingested before the ingest-side fix can hold fragment "urls" —
+    # the read side must skip them rather than render a self-anchor link.
+    conn = _conn(seeded_settings)
+    conn.execute(
+        """INSERT INTO listings (source, vin, price, url, raw_json, first_seen, last_seen)
+           VALUES ('autodev', ?, 61000, '#-4976296983083547062', '{}',
+                   '2026-07-01T00:00:00Z', '2026-07-20T00:00:00Z')""",
+        (REVIEW_VIN,),
+    )
+    conn.commit()
+    det = store.vehicle_detail(conn, REVIEW_VIN)
+    assert det.listing_url is None  # junk skipped, no link rendered
+    # The BW car's genuine URL still comes through.
+    assert store.vehicle_detail(conn, BW_VIN).listing_url.startswith("https://")
+
+
 def test_all_conflicts_hides_excluded_cars_by_default(seeded_settings):
     # The seeded conflict is on the excluded C8 — a car that already
     # hard-failed. Its conflict is noise, hidden unless explicitly requested.

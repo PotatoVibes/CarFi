@@ -119,8 +119,10 @@ def vehicle_detail(conn: sqlite3.Connection, vin: str) -> VehicleDetail | None:
             "SELECT price, observed_at FROM price_history WHERE vin = ? ORDER BY id", (vin,)
         ).fetchall()
     ]
+    # LIKE 'http%' also filters junk fragment "urls" already stored before
+    # the ingest-side fix (Auto.dev sends e.g. '#-497629...' for some rows).
     listing = conn.execute(
-        "SELECT url FROM listings WHERE vin = ? AND url IS NOT NULL "
+        "SELECT url FROM listings WHERE vin = ? AND url LIKE 'http%' "
         "ORDER BY last_seen DESC LIMIT 1",
         (vin,),
     ).fetchone()

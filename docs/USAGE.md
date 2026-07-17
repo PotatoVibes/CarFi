@@ -175,9 +175,11 @@ Auto.dev key — tune freely and re-run as often as you like. (A sync only re-sc
 you already have.)
 
 Rescore also **backfills window stickers** for cars that don't have one yet —
-up to 50 free GM fetches per run (~3 s each, out of politeness to GM's endpoint),
+up to 100 free GM fetches per run (~3 s each, out of politeness to GM's endpoint),
 **best-looking active cars first**. So each rescore upgrades the most promising
-*needs review* cars toward a verified *ranked*/*excluded* verdict.
+*needs review* cars toward a verified *ranked*/*excluded* verdict. Build-sheet
+fetches backfill the same way (100/run), and both providers are capped at
+1,000 calls/month by BudgetGuard.
 
 > A malformed YAML is rejected with a clear error and nothing is changed, so a
 > typo can't corrupt your data — fix it and re-run.

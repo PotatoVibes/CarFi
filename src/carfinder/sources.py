@@ -98,6 +98,15 @@ def _as_float(v: Any) -> float | None:
         return None
 
 
+def _as_url(v: Any) -> str | None:
+    """Absolute http(s) URLs only. Auto.dev sometimes sends junk fragments
+    like '#-4976296983083547062' as retailListing.vdp — rendering those as a
+    link just re-anchors the current page."""
+    if isinstance(v, str) and v.lower().startswith(("http://", "https://")):
+        return v
+    return None
+
+
 def normalize(item: dict[str, Any], source: str) -> ListingRow:
     """Map a raw Auto.dev listing (nested or flat) into a ListingRow.
 
@@ -119,7 +128,7 @@ def normalize(item: dict[str, Any], source: str) -> ListingRow:
             item, "vehicle.exteriorColor", "vehicle.exterior_color", "vehicle.color", "color"
         ),
         created_at=_first(item, "createdAt", "created_at"),
-        url=_first(item, "retailListing.vdp", "retailListing.vdpUrl", "url"),
+        url=_as_url(_first(item, "retailListing.vdp", "retailListing.vdpUrl", "url")),
         raw=item,
     )
 

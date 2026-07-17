@@ -77,6 +77,17 @@ def test_normalize_missing_fields_are_none():
     assert row.price is None and row.miles is None and row.color is None
 
 
+def test_normalize_rejects_junk_fragment_urls():
+    # Auto.dev sends fragments like '#-4976296983083547062' as vdp for some
+    # rows — rendering those as links just re-anchors the current page.
+    junk = normalize({"vehicle.vin": "V", "retailListing.vdp": "#-4976296983083547062"}, "autodev")
+    assert junk.url is None
+    rel = normalize({"vehicle.vin": "V", "retailListing.vdp": "/cars/123"}, "autodev")
+    assert rel.url is None
+    ok = normalize({"vehicle.vin": "V", "retailListing.vdp": "https://dealer.example/x"}, "autodev")
+    assert ok.url == "https://dealer.example/x"
+
+
 # --- search_page -----------------------------------------------------------
 
 
