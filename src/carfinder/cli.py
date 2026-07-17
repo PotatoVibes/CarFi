@@ -45,8 +45,11 @@ def fetch_stickers(vins: list[str]) -> None:
 
 
 @app.command()
-def sync(full: bool = False) -> None:
-    """Run a sync over every configured profile (headless; no server needed)."""
+def sync(
+    full: bool = False,
+    model: str = typer.Option(None, help="Only this model_key (e.g. ct4v_blackwing)"),
+) -> None:
+    """Run a sync over every configured profile — or just one with --model."""
     from datetime import UTC, datetime
 
     from .runner import run_sync
@@ -60,6 +63,7 @@ def sync(full: bool = False) -> None:
             datetime.now(UTC).year,
             mode="full" if full else "incremental",
             config_dir=settings.config_dir,
+            only_model=model,
         )
     except ValueError as exc:
         typer.echo(f"error: {exc}", err=True)

@@ -152,6 +152,25 @@ def test_full_sync_without_key_flashes(seeded_settings):
     assert "flash=" in r.headers["location"]
 
 
+def test_model_scoped_sync_unknown_model_404s(seeded_settings):
+    c = _client(seeded_settings)
+    assert c.post("/sync?model=nope", follow_redirects=False).status_code == 404
+    assert c.post("/sync/full?model=nope", follow_redirects=False).status_code == 404
+
+
+def test_model_scoped_sync_without_key_flashes(seeded_settings):
+    r = _client(seeded_settings).post("/sync?model=ct4v_blackwing", follow_redirects=False)
+    assert r.status_code == 303
+    assert "flash=" in r.headers["location"]
+
+
+def test_matches_page_has_model_scoped_sync_buttons(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert "/sync?model=ct4v_blackwing" in r
+    assert "/sync/full?model=ct4v_blackwing" in r
+    assert "Sync this model" in r
+
+
 def test_refresh_one_without_key_flashes(seeded_settings):
     r = _client(seeded_settings).post(f"/refresh/{BW_VIN}", follow_redirects=False)
     assert r.status_code == 303

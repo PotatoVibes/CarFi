@@ -35,6 +35,18 @@ def _prefixed(progress: Callable[[str], None] | None, name: str):
     return lambda msg: progress(f"{name}: {msg}")
 
 
+def _selected(config_dir: str | Path, only_model: str | None) -> list[Profile]:
+    """All profiles, or just the one matching `only_model` (by model_key)."""
+    profiles = load_profiles(config_dir)
+    if only_model is None:
+        return profiles
+    selected = [p for p in profiles if p.model_key == only_model]
+    if not selected:
+        known = ", ".join(p.model_key for p in profiles)
+        raise ValueError(f"unknown model {only_model!r} (have: {known})")
+    return selected
+
+
 def run_sync(
     conn: sqlite3.Connection,
     settings: Settings,
@@ -42,11 +54,13 @@ def run_sync(
     mode: str = "incremental",
     config_dir: str | Path = "config",
     progress: Callable[[str], None] | None = None,
+    only_model: str | None = None,
 ) -> dict[str, PipelineStats]:
-    """Build a live pipeline and run every profile. Returns {model_key: stats}."""
+    """Build a live pipeline and run every profile (or just `only_model`).
+    Returns {model_key: stats}."""
     pipeline = build_pipeline(conn, settings, current_year)
     results: dict[str, PipelineStats] = {}
-    for profile in load_profiles(config_dir):
+    for profile in _selected(config_dir, only_model):
         results[profile.model_key] = pipeline.run(
             profile, mode=mode, progress=_prefixed(progress, profile.name)
         )
@@ -59,13 +73,14 @@ def run_rescore(
     current_year: int,
     config_dir: str | Path = "config",
     progress: Callable[[str], None] | None = None,
+    only_model: str | None = None,
 ) -> dict[str, PipelineStats]:
     """Re-score every known vehicle against the current profiles — no sync, no
     Auto.dev key needed, ~zero network (cached sticker/AI). Use after editing a
     profile to re-rank cars already in the database."""
     pipeline = build_rescore_pipeline(conn, settings, current_year)
     results: dict[str, PipelineStats] = {}
-    for profile in load_profiles(config_dir):
+    for profile in _selected(config_dir, only_model):
         results[profile.model_key] = pipeline.rescore(
             profile, progress=_prefixed(progress, profile.name)
         )

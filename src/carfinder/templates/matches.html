@@ -2,7 +2,7 @@
 {% block title %}{{ name }} — Car Finder{% endblock %}
 {% block content %}
 <h1>{{ name }}</h1>
-<p>
+<p style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
   <span class="badge ranked">{{ counts.ranked }} ranked</span>
   <span class="badge needs_review">{{ counts.needs_review }} needs review</span>
   {% if show_excluded %}
@@ -18,6 +18,16 @@
       <a href="/m/{{ model_key }}?show_dismissed=true">show {{ counts.dismissed }} dismissed</a>
     {% endif %}
   {% endif %}
+  <span style="margin-left:auto; display:inline-flex; gap:8px">
+    <form method="post" action="/sync?model={{ model_key }}" data-job style="margin:0"
+          title="Incremental sync of {{ name }} only — walks newest listings until it hits known ones">
+      <button type="submit" class="secondary">⟳ Sync this model</button>
+    </form>
+    <form method="post" action="/sync/full?model={{ model_key }}" data-job style="margin:0"
+          title="Full pass of {{ name }} only — every page, price drops + sold detection (more API calls)">
+      <button type="submit" class="secondary">Full pass</button>
+    </form>
+  </span>
 </p>
 
 <p style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">

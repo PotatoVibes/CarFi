@@ -458,7 +458,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def job_status():
         return {"job": app.state.job}
 
-    def _sync_work(mode: str):
+    def _sync_work(mode: str, only_model: str | None = None):
         def work(progress):
             from .runner import run_sync
 
@@ -471,6 +471,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     mode=mode,
                     config_dir=settings.config_dir,
                     progress=progress,
+                    only_model=only_model,
                 )
             finally:
                 c.close()
@@ -478,20 +479,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return work
 
-    def _start_sync(mode: str, kind: str) -> RedirectResponse:
+    def _start_sync(mode: str, kind: str, model: str | None = None) -> RedirectResponse:
+        """Kick off a sync job — every profile, or just `model` when given."""
+        if model is not None:
+            profile = app.state.profiles_by_key.get(model)
+            if profile is None:
+                return HTMLResponse("Unknown model", status_code=404)  # type: ignore[return-value]
+            kind = f"{kind} · {profile.name}"
         if not settings.autodev_api_key:
             return _flash_redirect("Sync needs AUTODEV_API_KEY in .env — no key found.")
-        if not _start_job(kind, _sync_work(mode)):
+        if not _start_job(kind, _sync_work(mode, only_model=model)):
             return _flash_redirect("A job is already running — wait for it to finish.")
-        return RedirectResponse("/", status_code=303)
+        # Model-scoped syncs come from that model's page — return there.
+        return RedirectResponse(f"/m/{model}" if model else "/", status_code=303)
 
     @app.post("/sync")
-    def sync_now():
-        return _start_sync("incremental", "sync")
+    def sync_now(model: str | None = None):
+        return _start_sync("incremental", "sync", model)
 
     @app.post("/sync/full")
-    def sync_full():
-        return _start_sync("full", "full pass")
+    def sync_full(model: str | None = None):
+        return _start_sync("full", "full pass", model)
 
     @app.post("/refresh/{vin}")
     def refresh_one(vin: str):

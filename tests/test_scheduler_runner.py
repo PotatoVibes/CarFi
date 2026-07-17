@@ -24,6 +24,17 @@ def test_load_profiles_reads_config_dir():
     assert {"c8_stingray", "ct4v_blackwing"} <= keys
 
 
+def test_selected_filters_to_one_model():
+    from carfinder.runner import _selected
+
+    all_profiles = _selected(ROOT / "config", None)
+    assert len(all_profiles) >= 2
+    only = _selected(ROOT / "config", "ct4v_blackwing")
+    assert [p.model_key for p in only] == ["ct4v_blackwing"]
+    with pytest.raises(ValueError, match="unknown model 'nope'"):
+        _selected(ROOT / "config", "nope")
+
+
 def test_build_pipeline_requires_autodev_key(seeded_settings):
     conn = db.bootstrap(":memory:")
     with pytest.raises(ValueError, match="AUTODEV_API_KEY"):
