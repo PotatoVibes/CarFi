@@ -98,6 +98,12 @@ def test_matches_table_is_sortable_and_filterable(seeded_settings):
     assert f'data-vin="{REVIEW_VIN}"' in r.text  # row data attrs for sort/filter
 
 
+def test_matches_rows_show_vin_with_google_link(seeded_settings):
+    r = _client(seeded_settings).get("/m/c8_stingray")
+    assert f"https://www.google.com/search?q={REVIEW_VIN}" in r.text
+    assert 'data-key="vin"' in r.text  # sortable VIN column
+
+
 def test_detail_links_to_dealer_listing(seeded_settings):
     r = _client(seeded_settings).get(f"/v/{BW_VIN}")
     assert "https://dealer.example/bw-listing" in r.text

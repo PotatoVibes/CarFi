@@ -48,6 +48,7 @@
       <th data-key="price" data-num>Price</th>
       <th data-key="bonus" data-num>Bonus</th>
       <th data-key="sticker">Sticker</th>
+      <th data-key="vin">VIN</th>
       <th></th>
       <th></th>
     </tr>
@@ -71,6 +72,9 @@
       <td class="muted">{% if r.highlight_bonus %}+{{ "%.0f"|format(r.highlight_bonus) }}{% endif %}</td>
       <td>{% if r.sticker_status == "found" %}<span class="badge verified">✓</span>
           {% else %}<span class="muted">{{ r.sticker_status or "—" }}</span>{% endif %}</td>
+      <td><a class="muted" style="font-size:12px; font-family:ui-monospace, monospace"
+             href="https://www.google.com/search?q={{ r.vin }}" target="_blank" rel="noopener"
+             title="search this VIN on Google">{{ r.vin }}</a></td>
       <td><a href="/v/{{ r.vin }}">detail →</a></td>
       <td>
         {% set back = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") %}
@@ -82,7 +86,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="10" class="muted">No matches yet.</td></tr>
+    <tr><td colspan="11" class="muted">No matches yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
