@@ -16,6 +16,31 @@ from carfinder.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+@pytest.fixture(autouse=True)
+def _no_network(request, monkeypatch):
+    """Enforce the project hard rule that the default pytest profile is fully
+    offline: any real socket connect in a non-`live` test fails loudly instead
+    of silently hitting (and spending) a real endpoint."""
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+    import socket
+
+    real_connect = socket.socket.connect
+
+    def _guarded(self, address, *args, **kwargs):
+        # Loopback stays open: Windows asyncio (ProactorEventLoop) wires its
+        # own self-pipe through a localhost socketpair.
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, str) and (host.startswith("127.") or host in ("::1", "localhost")):
+            return real_connect(self, address, *args, **kwargs)
+        raise RuntimeError(f"offline test attempted a real network connection to {host!r}")
+
+    monkeypatch.setattr(socket.socket, "connect", _guarded)
+    yield
+
+
 BW_VIN = "1G6D65RP8N0460286"  # committed sticker fixture exists on disk
 C8_VIN = "1G1YC3D47P5121316"
 REVIEW_VIN = "1G1YCLAIMONLY00001"

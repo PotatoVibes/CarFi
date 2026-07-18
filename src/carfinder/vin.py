@@ -32,9 +32,41 @@ fact means "this VIN pattern is outside verified ground truth", never a guess.
 
 from __future__ import annotations
 
+import re
+
 _C8_TRIM = {"A": "1LT", "B": "2LT", "C": "3LT"}
 _C8_BODY = {"2": "COUPE", "3": "CONVERTIBLE"}
 _YEAR = {"L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027}
+
+# --- ISO 3779 validation (17 chars, no I/O/Q, position-9 check digit) -------
+
+_VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+_CHECK_VALUES = {
+    **{str(d): d for d in range(10)},
+    "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8,
+    "J": 1, "K": 2, "L": 3, "M": 4, "N": 5, "P": 7, "R": 9,
+    "S": 2, "T": 3, "U": 4, "V": 5, "W": 6, "X": 7, "Y": 8, "Z": 9,
+}  # fmt: skip
+_CHECK_WEIGHTS = (8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2)
+
+
+def validate(vin: str | None) -> str | None:
+    """Full VIN validation. Returns an error message, or None when valid.
+
+    North-American VINs (all GM cars this tool tracks) carry an ISO 3779
+    check digit at position 9, so a typo'd VIN is caught before any
+    fetching/scoring spends time or budget on it.
+    """
+    v = (vin or "").strip().upper()
+    if len(v) != 17:
+        return f"a VIN is 17 characters (got {len(v)})"
+    if not _VIN_RE.match(v):
+        return "VINs never contain I, O, or Q — check for typos"
+    total = sum(_CHECK_VALUES[ch] * w for ch, w in zip(v, _CHECK_WEIGHTS, strict=True))
+    expected = "X" if total % 11 == 10 else str(total % 11)
+    if v[8] != expected:
+        return "check digit mismatch — one of the characters is mistyped"
+    return None
 
 
 def decode(vin: str | None) -> dict[str, str]:

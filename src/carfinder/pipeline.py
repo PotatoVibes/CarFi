@@ -232,20 +232,39 @@ class Pipeline:
             self._conn.commit()
             fetched = "no active listing — marked presumed sold"
 
+        verdict = self._score_one(vin, profile, run_id, progress)
+        return f"{vin}: {fetched} · {verdict}"
+
+    def score_vin(
+        self,
+        vin: str,
+        profile: Profile,
+        progress: Callable[[str], None] | None = None,
+    ) -> str:
+        """Verify + score ONE car from its VIN alone (manually tracked — no
+        listing). VIN facts, window sticker, and build sheet drive the verdict
+        exactly as for synced cars; needs no Auto.dev key. Returns a summary."""
+        vin = vin.upper()
+        run_id = f"addvin-{uuid4().hex[:8]}"
+        verdict = self._score_one(vin, profile, run_id, progress)
+        return f"{vin}: verified & scored · {verdict}"
+
+    def _score_one(self, vin, profile, run_id, progress) -> str:
+        """Run the verification chain + scorer for one VIN; returns a short
+        'verdict at total' summary of the persisted result."""
         if progress is not None:
-            progress(f"re-scoring {vin}")
-        stats = PipelineStats(sync=SyncStats(run_id=run_id, mode="refresh"))
+            progress(f"verifying & scoring {vin}")
+        stats = PipelineStats(sync=SyncStats(run_id=run_id, mode="single"))
         attributes = _profile_attributes(profile) if self._extractor is not None else []
         self._process_vin(vin, profile, attributes, run_id, stats)
         result = self._conn.execute(
             "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
         ).fetchone()
-        verdict = (
+        return (
             f"{result['verdict'].replace('_', ' ')} at {result['total']:.0f}"
             if result
             else "scored"
         )
-        return f"{vin}: {fetched} · {verdict}"
 
     def _sync_full_segmented(self, params, profile, run_id, progress) -> SyncStats:
         """One full walk per model year, merged; delist runs once on the union.

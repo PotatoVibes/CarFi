@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.templating import Jinja2Templates
 
 from . import colors, features, profile_edit, store
+from . import vin as vin_decode
 from .budget import BudgetGuard
 from .colors import ColorFamily
 from .config import Settings, load_settings
@@ -502,6 +503,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/sync/full")
     def sync_full(model: str | None = None):
         return _start_sync("full", "full pass", model)
+
+    # World-manufacturer prefix -> which profile a hand-entered VIN belongs to.
+    _VIN_PREFIX_MODEL = {"1G1Y": "c8_stingray", "1G6D": "ct4v_blackwing"}
+
+    @app.post("/vins")
+    async def add_vin(request: Request):
+        """Track a VIN by hand: validate it, then run the same VIN-decode ->
+        sticker -> build-sheet -> score chain synced cars get. No listing —
+        price/miles/location stay unknown until a sync happens to see it."""
+        form = await _form(request)
+        vin = _field(form, "vin").strip().upper()
+        error = vin_decode.validate(vin)
+        if error is not None:
+            return _flash_redirect(f"Not a valid VIN: {error}.")
+        model_key = _VIN_PREFIX_MODEL.get(vin[:4])
+        profile = app.state.profiles_by_key.get(model_key) if model_key else None
+        if profile is None:
+            prefixes = ", ".join(f"{k}… ({v})" for k, v in _VIN_PREFIX_MODEL.items())
+            return _flash_redirect(f"VIN {vin} isn't a tracked model — expected {prefixes}.")
+
+        c = conn()
+        try:
+            exists = c.execute("SELECT 1 FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+            if exists is None:
+                now = _now_iso()
+                c.execute(
+                    """INSERT INTO vehicles (vin, model_key, year, status, missing_passes,
+                       first_seen, last_seen) VALUES (?,?,?, 'active', 0, ?, ?)""",
+                    (vin, model_key, vin_decode.model_year(vin), now, now),
+                )
+                c.commit()
+        finally:
+            c.close()
+        if exists is not None:
+            return RedirectResponse(f"/v/{vin}", status_code=303)  # already tracked
+
+        def work(progress):
+            from .pipeline import build_rescore_pipeline
+
+            c2 = bootstrap(settings.db_path)
+            try:
+                pipeline = build_rescore_pipeline(c2, settings, datetime.now(UTC).year)
+                return pipeline.score_vin(vin, profile, progress=progress)
+            finally:
+                c2.close()
+
+        if not _start_job("add VIN", work):
+            return _flash_redirect(
+                f"{vin} added, but a job is already running — hit Rescore later to score it."
+            )
+        return RedirectResponse(f"/v/{vin}", status_code=303)
 
     @app.post("/refresh/{vin}")
     def refresh_one(vin: str):

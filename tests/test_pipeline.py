@@ -781,6 +781,17 @@ def test_refresh_vin_updates_price_location_and_rescores():
     assert _match(conn, BW_VIN)["verdict"] == "ranked"
 
 
+def test_score_vin_verifies_manual_vin_without_listing():
+    # No vehicles row, no listing, no Auto.dev source needed — the committed
+    # BW sticker drives a verified verdict from the VIN alone.
+    pipe, conn = _pipeline([])
+    bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")
+    summary = pipe.score_vin(BW_VIN.lower(), bw)
+    assert BW_VIN in summary and "verified & scored" in summary and "ranked" in summary
+    m = _match(conn, BW_VIN)
+    assert m is not None and m["verdict"] == "ranked"
+
+
 def test_refresh_vin_404_marks_presumed_sold():
     pipe, conn = _pipeline([_bw_row()])
     bw = load_profile(ROOT / "config" / "ct4v_blackwing.yaml")

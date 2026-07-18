@@ -318,9 +318,11 @@ def _wait_for_job(client, timeout: float = 15.0) -> dict:
     raise AssertionError(f"job did not finish: {job}")
 
 
-def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
-    # Keep the job fully offline: the fake REVIEW_VIN isn't sticker-cached, so
-    # stub the fetcher to answer from cache with not_found.
+def _stub_offline_fetchers(monkeypatch):
+    """Answer sticker AND build-sheet lookups from 'cache' with not_found, so
+    scoring jobs run with zero network. (The build-sheet stub is load-bearing:
+    without it an uncached VIN would POST to gmpartsgiant for real.)"""
+    from carfinder import buildsheet
     from carfinder.stickers import NOT_FOUND, FetchResult, StickerFetcher
 
     monkeypatch.setattr(StickerFetcher, "is_cached", lambda self, vin: True)
@@ -331,6 +333,17 @@ def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
             vin=vin, status=NOT_FOUND, path=None, from_cache=True
         ),
     )
+    monkeypatch.setattr(
+        buildsheet.BuildSheetFetcher,
+        "fetch",
+        lambda self, vin, run_id=None: buildsheet.FetchResult(
+            vin=vin, status=buildsheet.NOT_FOUND, sheet=None, from_cache=True
+        ),
+    )
+
+
+def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
+    _stub_offline_fetchers(monkeypatch)
     c = _client(seeded_settings)
     r = c.post("/rescore", follow_redirects=False)
     assert r.status_code == 303
@@ -342,3 +355,58 @@ def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
     r2 = c.post("/rescore", follow_redirects=False)
     assert r2.status_code == 303 and "flash=" not in r2.headers["location"]
     assert _wait_for_job(c)["state"] == "done"
+
+
+# --- manually tracked VINs ---------------------------------------------------
+
+NEW_BW_VIN = "1G6D65RP2R0460256"  # real 2024 Blackwing manual, not seeded
+
+
+def test_add_vin_rejects_invalid(seeded_settings):
+    c = _client(seeded_settings)
+    for bad in ("SHORT", "1G6D65RP9R046025X", "1G6D65RP2R046025O"):
+        r = c.post("/vins", data={"vin": bad}, follow_redirects=False)
+        assert r.status_code == 303
+        assert "flash=" in r.headers["location"]
+    # Valid check digit but not a model this tool tracks (a Honda).
+    r = c.post("/vins", data={"vin": "1HGCM82633A004352"}, follow_redirects=False)
+    assert "flash=" in r.headers["location"]
+    # Nothing was inserted for any of them.
+    import sqlite3
+
+    conn = sqlite3.connect(str(seeded_settings.db_path))
+    assert conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0] == 3  # the seeds
+    conn.close()
+
+
+def test_add_vin_tracks_and_scores(seeded_settings, monkeypatch):
+    _stub_offline_fetchers(monkeypatch)
+    c = _client(seeded_settings)
+    r = c.post("/vins", data={"vin": NEW_BW_VIN.lower()}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/v/{NEW_BW_VIN}"  # normalized to upper
+    job = _wait_for_job(c)
+    assert job["state"] == "done", job
+    assert "verified & scored" in job["summary"]
+    # Vehicle row exists with model + VIN-decoded year; the car was scored.
+    import sqlite3
+
+    conn = sqlite3.connect(str(seeded_settings.db_path))
+    conn.row_factory = sqlite3.Row
+    v = conn.execute("SELECT model_key, year FROM vehicles WHERE vin=?", (NEW_BW_VIN,)).fetchone()
+    assert v["model_key"] == "ct4v_blackwing" and v["year"] == 2024
+    m = conn.execute("SELECT verdict FROM match_results WHERE vin=?", (NEW_BW_VIN,)).fetchone()
+    assert m is not None
+    conn.close()
+    # The detail page renders (no listing link needed) and shows the car.
+    det = c.get(f"/v/{NEW_BW_VIN}")
+    assert det.status_code == 200
+    # Re-adding the same VIN just redirects to the existing detail page.
+    r2 = c.post("/vins", data={"vin": NEW_BW_VIN}, follow_redirects=False)
+    assert r2.status_code == 303 and r2.headers["location"] == f"/v/{NEW_BW_VIN}"
+
+
+def test_index_has_track_vin_form(seeded_settings):
+    r = _client(seeded_settings).get("/").text
+    assert 'action="/vins"' in r
+    assert "Track VIN" in r

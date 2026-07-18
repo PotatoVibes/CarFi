@@ -379,7 +379,13 @@ def test_missing_highlight_contributes_nothing():
 
 
 def test_seed_c8_fully_loaded_verified_car_ranks_high():
+    # Profile-derived, not golden: the user edits bounds/colors via the UI, so
+    # build the "perfect car" from whatever the profile currently asks for.
     c8 = load_profile(CONFIG / "c8_stingray.yaml")
+    price_c = next(s for s in c8.soft if s.kind == "numeric" and s.attr == "price")
+    miles_c = next(s for s in c8.soft if s.kind == "numeric" and s.attr == "miles")
+    color_c = next((s for s in c8.soft if s.kind == "color"), None)
+    paint = "GM0" if (color_c is None or "blue" in color_c.preferred) else None
     sticker = (
         "CHEVROLET CORVETTE STINGRAY CONVERTIBLE 3LT\n"
         "Z51 PERFORMANCE PACKAGE\nMAGNETIC RIDE CONTROL\n"
@@ -388,15 +394,19 @@ def test_seed_c8_fully_loaded_verified_car_ranks_high():
     v = Vehicle(
         vin="1G1Y",
         year=2023,
-        miles=18000,
-        price=61000,
+        miles=int(miles_c.ideal),
+        price=price_c.ideal,
         verified_text=sticker,
         sticker_complete=True,
         verified_rpo={"Z51", "FE4", "E60", "NPP"},
-        paint_rpo="GM0",
+        paint_rpo=paint,
     )
     r = score_vehicle(c8, v)
     assert r.verdict == "ranked"
+    # Ideal-value car: every KNOWN dimension scores 100 (color drops to
+    # unknown if the user ever stops preferring blue — still fine).
+    known = [s for s in r.soft if s.dim_score is not None]
+    assert all(s.dim_score == pytest.approx(100.0) for s in known)
     assert r.soft_score == pytest.approx(100.0)
     assert r.highlight_bonus == pytest.approx(HIGHLIGHT_CAP)  # 8 + 4 capped at 10
 

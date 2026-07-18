@@ -98,8 +98,8 @@ soft:
   kind: numeric
   weight: 0.25
   attr: price
-  ideal: 63000.0
-  hard: 70000.0
+  ideal: 60000.0
+  hard: 66000.0
   direction: lower_better
   exclude_beyond_hard: false
   preferred: []
@@ -122,6 +122,7 @@ soft:
   - red
   - white
   - black
+  - brown
   neutral_score: 50.0
 highlights:
 - label: Front lift w/ memory

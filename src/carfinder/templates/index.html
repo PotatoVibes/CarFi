@@ -51,5 +51,19 @@
     <p class="muted" style="margin-bottom:0">Re-rank every known car against the current
       profile YAMLs. Run after editing preferences — uses cached data, ~zero API calls.</p>
   </div>
+  <div class="card">
+    <form method="post" action="/vins" data-job style="display:flex; gap:8px">
+      <input name="vin" required minlength="17" maxlength="17"
+             pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" placeholder="17-character VIN"
+             title="17 characters, no I/O/Q"
+             style="font:inherit; font-family:ui-monospace, monospace; padding:6px 10px;
+                    border-radius:6px; border:1px solid #262b36; background:#171a21;
+                    color:inherit; flex:1; min-width:0; text-transform:uppercase">
+      <button type="submit" class="secondary" style="flex:none">Track VIN</button>
+    </form>
+    <p class="muted" style="margin-bottom:0">Saw a car somewhere else? Paste its VIN —
+      it's validated, decoded, sticker/build-sheet verified, and scored like any synced
+      car (no listing link or price until a sync spots it).</p>
+  </div>
 </div>
 {% endblock %}

@@ -95,3 +95,31 @@ def test_forbid_semantics_stingray_fact_clears_z06():
     o = match(m, v)
     # Fact present and NOT in the forbidden set -> verified absent.
     assert o.matched is False and o.provenance == Provenance.verified
+
+
+# --- ISO 3779 validation -----------------------------------------------------
+
+
+def test_validate_accepts_real_corpus_vins():
+    from carfinder.vin import validate
+
+    for real in (
+        "1G6D65RP8N0460286",  # BW sticker fixture
+        "1G1YC3D47P5121316",  # C8 sticker fixture
+        "1G6DL5RP5P0460421",
+        "1G6D65RP2R0460256",
+    ):
+        assert validate(real) is None
+        assert validate(real.lower()) is None  # case-insensitive
+
+
+def test_validate_rejects_bad_vins():
+    from carfinder.vin import validate
+
+    assert "17 characters" in validate("1G6D65RP8N046028")  # 16 chars
+    assert "17 characters" in validate("")
+    assert "17 characters" in validate(None)
+    assert "I, O, or Q" in validate("1G6D65RP8N04602I6")  # illegal letter
+    # One mistyped character flips the check digit.
+    assert "check digit" in validate("1G6D65RP8N0460287")
+    assert "check digit" in validate("1G6D65RP7N0460286")
