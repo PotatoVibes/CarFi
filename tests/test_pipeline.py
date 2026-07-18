@@ -748,6 +748,48 @@ def test_sticker_cap_scores_on_listing_only():
     assert _match(conn, vin) is not None
 
 
+# --- C8 FE suspension code -> definitive facts --------------------------------
+
+
+def test_c8_suspension_facts_mapping():
+    from carfinder.pipeline import c8_suspension_facts
+
+    assert c8_suspension_facts("c8_stingray", {"FE1", "J6A"}) == {
+        "z51": "NO",
+        "magneride": "NO",
+    }
+    assert c8_suspension_facts("c8_stingray", {"FE2"}) == {"z51": "NO", "magneride": "YES"}
+    assert c8_suspension_facts("c8_stingray", {"FE3"}) == {"z51": "YES", "magneride": "NO"}
+    # FE4 = Z51 both with and without MagneRide (corpus 44/43) -> Z51 only.
+    assert c8_suspension_facts("c8_stingray", {"FE4"}) == {"z51": "YES"}
+    # No code, conflicting codes, or another model -> no facts, never a guess.
+    assert c8_suspension_facts("c8_stingray", {"Z51", "NPP"}) == {}
+    assert c8_suspension_facts("c8_stingray", {"FE2", "FE4"}) == {}
+    assert c8_suspension_facts("ct4v_blackwing", {"FE4"}) == {}
+
+
+def test_build_sheet_fe_code_feeds_facts():
+    from carfinder.buildsheet import BuildSheet
+
+    pipe, conn = _pipeline([])
+    sheet = BuildSheet(
+        vin="1G1YB3D44M5125399",  # the 2021 2LT from the gmpartsgiant screenshot
+        year=2021,
+        options={"FE2", "J6A", "G8G"},
+        text="FE2 SUSPENSION SYSTEM,RIDE AND HANDLING",
+    )
+    v = pipe._build_vehicle("1G1YB3D44M5125399", "c8_stingray", None, None, {}, sheet=sheet)
+    assert v.vin_facts["z51"] == "NO"
+    assert v.vin_facts["magneride"] == "YES"
+    # VIN-decoded identity facts survive the merge.
+    assert v.vin_facts["trim"] == "2LT"
+
+    sheet4 = BuildSheet(vin="1G1YC3D46N5123183", options={"FE4"})
+    v4 = pipe._build_vehicle("1G1YC3D46N5123183", "c8_stingray", None, None, {}, sheet=sheet4)
+    assert v4.vin_facts["z51"] == "YES"
+    assert "magneride" not in v4.vin_facts  # FE4 stays undecided
+
+
 # --- single-car refresh ------------------------------------------------------
 
 

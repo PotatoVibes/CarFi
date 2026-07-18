@@ -519,7 +519,9 @@ class Pipeline:
                 kw["year"] = listing_year or vin_decode.model_year(vin)
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
-            kw["vin_facts"] = facts
+            # The FE suspension code is as definitive as a VIN char — it joins
+            # the facts so Z51/MagneRide resolve on build-sheet-only cars.
+            kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
             return Vehicle(**kw)
 
         if parsed is not None:
@@ -531,7 +533,7 @@ class Pipeline:
             # Keep the listing text as a claimed fallback alongside verified data.
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
-            kw["vin_facts"] = facts
+            kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
             # If neither the paint code nor the sticker's marketing name maps
             # to a color family, fall back to the listing's color text (both
             # text paths score as claimed provenance anyway).
@@ -680,6 +682,34 @@ def _segment_years(year_param: str | None) -> list[int]:
     if hi < lo:
         return []
     return list(range(lo, hi + 1))
+
+
+_C8_FE_CODES = frozenset({"FE1", "FE2", "FE3", "FE4"})
+
+
+def c8_suspension_facts(model_key: str, options: set[str]) -> dict[str, str]:
+    """Definitive facts from the C8's mutually-exclusive FE suspension code.
+
+    Corpus-verified against 312 parsed window stickers (2026-07-18, zero
+    Z51 exceptions):
+      FE1 = base            -> no Z51, no MagneRide      (103/103)
+      FE2 = base + MR       -> no Z51, MagneRide         (34/36; both outliers
+                               had garbled sticker text, code trusted)
+      FE3 = Z51             -> Z51, no MagneRide         (86/86)
+      FE4 = Z51 special R&H -> Z51; MagneRide UNDECIDED  (44 with / 43 without)
+    FE4 therefore emits no magneride fact — the sticker evidence chain
+    (F55 code / MAGNETIC text) decides, exactly like an unverified VIN range.
+    """
+    if model_key != "c8_stingray":
+        return {}
+    fe = options & _C8_FE_CODES
+    if len(fe) != 1:
+        return {}
+    code = next(iter(fe))
+    facts = {"z51": "YES" if code in ("FE3", "FE4") else "NO"}
+    if code != "FE4":
+        facts["magneride"] = "YES" if code == "FE2" else "NO"
+    return facts
 
 
 def _claimed_text(row) -> str:

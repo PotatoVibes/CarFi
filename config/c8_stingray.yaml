@@ -64,8 +64,9 @@ hard:
   label: Z51 Performance Package
   kind: require
   matcher:
-    vin_attr: null
-    vin_any: []
+    vin_attr: z51
+    vin_any:
+    - 'YES'
     rpo:
     - Z51
     sticker_text: Z51
@@ -74,8 +75,9 @@ hard:
   label: Magnetic Ride Control
   kind: require
   matcher:
-    vin_attr: null
-    vin_any: []
+    vin_attr: magneride
+    vin_any:
+    - 'YES'
     rpo:
     - F55
     sticker_text: MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE|MAGNETO RHEOLOGICAL

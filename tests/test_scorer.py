@@ -425,6 +425,42 @@ def test_seed_c8_fully_loaded_verified_car_ranks_high():
     assert r.highlight_bonus == pytest.approx(HIGHLIGHT_CAP)  # 8 + 4 capped at 10
 
 
+def test_seed_c8_suspension_facts_decide_z51_and_magneride():
+    """A build-sheet-only base+MagneRide car (FE2) must verified-FAIL Z51 —
+    excluded, not needs_review — and verified-pass MagneRide."""
+    c8 = load_profile(CONFIG / "c8_stingray.yaml")
+    v = Vehicle(
+        vin="1G1YB3D44M5125399",
+        year=2021,
+        vin_facts={
+            "model": "STINGRAY",
+            "trim": "2LT",
+            "body": "CONVERTIBLE",
+            "z51": "NO",
+            "magneride": "YES",
+        },
+    )
+    r = score_vehicle(c8, v)
+    z51 = next(h for h in r.hard if h.key == "z51")
+    mag = next(h for h in r.hard if h.key == "magneride")
+    assert z51.status == "fail" and z51.provenance == Provenance.verified
+    assert mag.status == "pass" and mag.provenance == Provenance.verified
+    assert r.verdict == "excluded"
+
+    # FE4 car: no magneride fact -> falls through to (absent) sticker
+    # evidence -> needs_review on that one requirement, never a guess.
+    v4 = Vehicle(
+        vin="X",
+        year=2023,
+        vin_facts={"model": "STINGRAY", "trim": "3LT", "body": "CONVERTIBLE", "z51": "YES"},
+    )
+    r4 = score_vehicle(c8, v4)
+    mag4 = next(h for h in r4.hard if h.key == "magneride")
+    assert mag4.status == "needs_review" and mag4.provenance == Provenance.unknown
+    z514 = next(h for h in r4.hard if h.key == "z51")
+    assert z514.status == "pass" and z514.provenance == Provenance.verified
+
+
 def test_seed_c8_z06_excluded():
     c8 = load_profile(CONFIG / "c8_stingray.yaml")
     v = Vehicle(
