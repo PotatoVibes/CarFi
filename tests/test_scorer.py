@@ -118,13 +118,27 @@ def test_score_floor_and_ceiling():
     assert worst.soft_score == pytest.approx(0.0)
 
 
-def test_unknown_dim_excluded_and_renormalized():
+def test_unknown_numeric_scores_neutral_50_at_full_weight():
     p = _numeric_profile()
-    # Only price known -> score is exactly the price dimension's score.
-    r = score_vehicle(p, Vehicle(price=67500))
-    assert r.soft_score == pytest.approx(50.0)
-    color = next(s for s in r.soft if s.key == "color")
-    assert color.provenance == Provenance.unknown
+    # Unknown miles scores a neutral 50 (full weight) so the known dims don't
+    # get renormalized to outsized influence; unknown color still drops out.
+    r = score_vehicle(p, Vehicle(price=67500))  # price at 50% of its band
+    by = {s.key: s for s in r.soft}
+    assert by["miles"].dim_score == pytest.approx(50.0)
+    assert by["miles"].provenance == Provenance.unknown
+    assert "neutral" in by["miles"].detail
+    assert r.soft_score == pytest.approx(50.0)  # (50*.25 + 50*.20) / .45
+    assert by["color"].provenance == Provenance.unknown
+    assert by["color"].dim_score is None
+
+
+def test_no_listing_car_color_not_overweighted():
+    # The motivating case: sticker-verified car, no listing at all. A loved
+    # color must not carry the entire soft score (100) — it's one dim of three.
+    p = _numeric_profile()
+    r = score_vehicle(p, Vehicle(paint_rpo="GM0"))  # blue = loved, nothing else
+    # (50*.25 + 50*.20 + 100*.10) / .55
+    assert r.soft_score == pytest.approx(59.0909, abs=1e-3)
 
 
 # --- monotonicity property -------------------------------------------------

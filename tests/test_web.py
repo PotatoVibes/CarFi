@@ -410,3 +410,74 @@ def test_index_has_track_vin_form(seeded_settings):
     r = _client(seeded_settings).get("/").text
     assert 'action="/vins"' in r
     assert "Track VIN" in r
+
+
+# --- manual listing info ------------------------------------------------------
+
+
+def test_set_listing_price_miles_and_rescores(seeded_settings, monkeypatch):
+    _stub_offline_fetchers(monkeypatch)
+    c = _client(seeded_settings)
+    r = c.post(
+        f"/v/{BW_VIN}/listing",
+        data={"url": "", "price": "54,000", "miles": "25000"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and r.headers["location"] == f"/v/{BW_VIN}"
+    job = _wait_for_job(c)
+    assert job["state"] == "done", job
+    assert "listing info saved" in job["summary"]
+    import sqlite3
+
+    conn = sqlite3.connect(str(seeded_settings.db_path))
+    conn.row_factory = sqlite3.Row
+    v = conn.execute("SELECT price, miles FROM vehicles WHERE vin=?", (BW_VIN,)).fetchone()
+    assert (v["price"], v["miles"]) == (54000.0, 25000)
+    manual = conn.execute(
+        "SELECT price, miles, url FROM listings WHERE source='manual' AND vin=?", (BW_VIN,)
+    ).fetchone()
+    assert (manual["price"], manual["miles"], manual["url"]) == (54000.0, 25000, None)
+    # Existing autodev URL survives (manual row has none to override it).
+    conn.close()
+    assert "https://dealer.example/bw-listing" in c.get(f"/v/{BW_VIN}").text
+
+
+def test_set_listing_url_overrides_feed_url_even_when_fetch_fails(seeded_settings, monkeypatch):
+    _stub_offline_fetchers(monkeypatch)
+    c = _client(seeded_settings)
+    # The offline guard blocks the page fetch — the URL must still be saved
+    # and become the one the detail page links to.
+    r = c.post(
+        f"/v/{BW_VIN}/listing",
+        data={"url": "https://www.ebay.com/itm/188641881520", "price": "", "miles": ""},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    job = _wait_for_job(c)
+    assert job["state"] == "done", job
+    assert "page fetch failed" in job["summary"]
+    det = c.get(f"/v/{BW_VIN}").text
+    assert "https://www.ebay.com/itm/188641881520" in det
+    # Prior price/miles untouched by the failed fetch.
+    import sqlite3
+
+    conn = sqlite3.connect(str(seeded_settings.db_path))
+    v = conn.execute("SELECT price, miles FROM vehicles WHERE vin=?", (BW_VIN,)).fetchone()
+    conn.close()
+    assert tuple(v) == (58000.0, 30000)
+
+
+def test_set_listing_rejects_bad_url_and_unknown_vin(seeded_settings):
+    c = _client(seeded_settings)
+    r = c.post(f"/v/{BW_VIN}/listing", data={"url": "not-a-url"}, follow_redirects=False)
+    assert "flash=" in r.headers["location"]
+    assert c.post("/v/NOPE/listing", data={"price": "1"}, follow_redirects=False).status_code == 404
+    # Nothing at all provided -> no job, straight back to the page.
+    r2 = c.post(f"/v/{BW_VIN}/listing", data={}, follow_redirects=False)
+    assert r2.headers["location"] == f"/v/{BW_VIN}"
+
+
+def test_detail_page_has_listing_form(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    assert f'action="/v/{BW_VIN}/listing"' in r
+    assert "Save listing info" in r

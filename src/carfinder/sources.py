@@ -257,6 +257,25 @@ class AutoDevSource:
         return Page(rows=rows, total=total, has_next=has_next, raw=data)
 
 
+# --- Manual (hand-entered listings) ----------------------------------------
+
+
+class ManualSource:
+    """Name-only source for hand-entered listings: gives SyncEngine.upsert a
+    `source` identity ('manual') without any feed behind it."""
+
+    name = "manual"
+
+    def search_page(
+        self,
+        params: dict[str, str],
+        page: int = 1,
+        sort: str = "createdAt.desc",
+        run_id: str | None = None,
+    ) -> Page:
+        raise NotImplementedError("manual listings have no feed to walk")
+
+
 # --- Marketcheck (stub, disabled) ------------------------------------------
 
 

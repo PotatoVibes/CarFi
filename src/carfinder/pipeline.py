@@ -315,6 +315,7 @@ class Pipeline:
             "SELECT year, miles, price, make, model, trim, color FROM vehicles WHERE vin=?",
             (vin,),
         ).fetchone()
+        manual_text = self._manual_page_text(vin)
 
         # Fast path: if the VIN alone verified-fails a hard requirement (wrong
         # trim/body/model), the car is excluded no matter what the sticker
@@ -337,13 +338,34 @@ class Pipeline:
         claimed_features = (
             {}
             if sheet is not None
-            else self._ai_features(vin, parsed, sticker_path, row, attributes, run_id, stats)
+            else self._ai_features(
+                vin, parsed, sticker_path, row, attributes, run_id, stats, manual_text=manual_text
+            )
         )
         vehicle = self._build_vehicle(
-            vin, profile.model_key, parsed, row, claimed_features, sheet=sheet
+            vin,
+            profile.model_key,
+            parsed,
+            row,
+            claimed_features,
+            sheet=sheet,
+            manual_text=manual_text,
         )
         result = score_vehicle(profile, vehicle)
         self._finish_vin(vin, profile, result, parsed, row, stats)
+
+    def _manual_page_text(self, vin: str) -> str:
+        """Text of a hand-pasted listing page (manual source), if one exists —
+        claimed evidence, same trust level as dealer free-text."""
+        row = self._conn.execute(
+            "SELECT raw_json FROM listings WHERE source='manual' AND vin=?", (vin,)
+        ).fetchone()
+        if row is None:
+            return ""
+        try:
+            return str(json.loads(row["raw_json"]).get("page_text") or "")
+        except ValueError:
+            return ""
 
     def _finish_vin(self, vin, profile, result, parsed, row, stats: PipelineStats) -> None:
         prior = self._conn.execute(
@@ -407,16 +429,25 @@ class Pipeline:
         return result.sheet if result.status == SHEET_FOUND else None
 
     def _ai_features(
-        self, vin, parsed, sticker_path, row, attributes, run_id, stats: PipelineStats
+        self,
+        vin,
+        parsed,
+        sticker_path,
+        row,
+        attributes,
+        run_id,
+        stats: PipelineStats,
+        manual_text: str = "",
     ) -> dict[str, str]:
-        """AI fallback (M5): claimed features from dealer text when no sticker,
-        or a vision re-parse when the sticker parsed at low confidence. Every
-        result is claimed provenance — it can never satisfy a hard requirement."""
+        """AI fallback (M5): claimed features from dealer text (and any pasted
+        listing page) when no sticker, or a vision re-parse when the sticker
+        parsed at low confidence. Every result is claimed provenance — it can
+        never satisfy a hard requirement."""
         if self._extractor is None or not attributes:
             return {}
         try:
             if parsed is None:
-                text = _claimed_text(row)
+                text = " ".join(t for t in (_claimed_text(row), manual_text) if t)
                 if not text:
                     return {}
                 ext = self._extractor.extract(text, attributes, run_id=run_id)
@@ -471,12 +502,13 @@ class Pipeline:
         row,
         claimed_features: dict[str, str],
         sheet: BuildSheet | None = None,
+        manual_text: str = "",
     ) -> Vehicle:
         """Merge verified sticker/build-sheet + VIN data with claimed data."""
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
-        claimed_text = _claimed_text(row)
+        claimed_text = " ".join(t for t in (_claimed_text(row), manual_text) if t)
         facts = vin_decode.decode(vin)
 
         if parsed is None and sheet is not None:

@@ -57,6 +57,26 @@
   &nbsp;·&nbsp; 🏷 seller: {% if v.get("dealer") %}{{ v.dealer }}{% else %}unknown (private sale or unlisted dealer){% endif %}
 </p>
 
+<form method="post" action="/v/{{ v.vin }}/listing" data-job
+      style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 4px">
+  <input name="url" type="url" placeholder="listing URL (eBay, dealer site…)"
+         value="{{ d.listing_url or '' }}"
+         style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                background:#171a21; color:inherit; flex:1; min-width:240px">
+  <input name="price" type="number" min="0"
+         placeholder="price{% if v.price is not none %} (now {{ '{:,.0f}'.format(v.price) }}){% endif %}"
+         style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                background:#171a21; color:inherit; width:150px">
+  <input name="miles" type="number" min="0"
+         placeholder="miles{% if v.miles is not none %} (now {{ '{:,}'.format(v.miles) }}){% endif %}"
+         style="font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #262b36;
+                background:#171a21; color:inherit; width:150px">
+  <button type="submit" class="secondary" style="flex:none">Save listing info</button>
+</form>
+<p class="muted" style="font-size:12.5px; margin-top:0">Paste a listing link and/or type
+  price &amp; miles. Blanks are read from the page when possible; the page text counts as
+  claimed evidence and the car re-scores.</p>
+
 <h2>Hard requirements</h2>
 <table><tbody>
   {% for h in d.breakdown.hard %}

@@ -197,8 +197,19 @@ def _soft_result(c, status, prov, detail, dim_score, **extra) -> RequirementResu
 def _evaluate_numeric(c: SoftConstraint, vehicle: Vehicle) -> _SoftEval:
     value = getattr(vehicle, c.attr)  # type: ignore[arg-type]
     if value is None:
+        # Unknown price/miles score a neutral 50 AT FULL WEIGHT instead of
+        # dropping out of the weighted mean. Exclusion renormalizes the
+        # remaining dims — a no-listing car's color would carry ~100% of the
+        # soft score and swing the total to the extremes.
         return _SoftEval(
-            _soft_result(c, "scored", Provenance.unknown, f"{c.attr} unknown", None), False
+            _soft_result(
+                c,
+                "scored",
+                Provenance.unknown,
+                f"{c.attr} unknown -> 50 (neutral until known)",
+                50.0,
+            ),
+            False,
         )
     score = _numeric_score(c, float(value))
     breach = False

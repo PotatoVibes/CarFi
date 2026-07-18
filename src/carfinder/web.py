@@ -555,6 +555,101 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return RedirectResponse(f"/v/{vin}", status_code=303)
 
+    @app.post("/v/{vin}/listing")
+    async def set_listing(request: Request, vin: str):
+        """Attach/correct a listing by hand: URL and/or price and miles.
+        Blank price/miles are pulled from the page when a URL is given (best
+        effort); the page text becomes claimed evidence and the car rescores."""
+        vin = vin.upper()
+        form = await _form(request)
+        url_raw = _field(form, "url").strip()
+        url = url_raw if url_raw.lower().startswith(("http://", "https://")) else None
+        if url_raw and url is None:
+            return _flash_redirect("Listing URL must start with http:// or https://.")
+
+        def _num(key: str) -> float | None:
+            s = _field(form, key).replace(",", "").replace("$", "").strip()
+            try:
+                return float(s) if s else None
+            except ValueError:
+                return None
+
+        price_in, miles_in = _num("price"), _num("miles")
+        if url is None and price_in is None and miles_in is None:
+            return RedirectResponse(f"/v/{vin}", status_code=303)  # nothing to save
+        c = conn()
+        try:
+            v = c.execute("SELECT model_key FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+        finally:
+            c.close()
+        if v is None:
+            return HTMLResponse("Unknown VIN", status_code=404)
+        profile = app.state.profiles_by_key.get(v["model_key"])
+        if profile is None:
+            return _flash_redirect(f"No profile loaded for {v['model_key']!r}.")
+
+        def work(progress):
+            from .manual_listing import extract_miles, extract_price, fetch_page_text
+            from .pipeline import build_rescore_pipeline
+            from .sources import ListingRow, ManualSource
+            from .sync import SyncEngine
+
+            c2 = bootstrap(settings.db_path)
+            try:
+                page_text = None
+                if url:
+                    progress("fetching the listing page…")
+                    page_text = fetch_page_text(url)
+                price = price_in if price_in is not None else extract_price(page_text)
+                miles = miles_in if miles_in is not None else extract_miles(page_text)
+                vrow = c2.execute("SELECT * FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+                row = ListingRow(
+                    vin=vin,
+                    source="manual",
+                    # New info wins; otherwise carry what we know so the
+                    # vehicles upsert can't blank existing fields.
+                    price=price if price is not None else vrow["price"],
+                    miles=int(miles) if miles is not None else vrow["miles"],
+                    year=vrow["year"],
+                    make=vrow["make"],
+                    model=vrow["model"],
+                    trim=vrow["trim"],
+                    color=vrow["color"],
+                    url=url,
+                    dealer=vrow["dealer"],
+                    city=vrow["city"],
+                    state=vrow["state"],
+                    zip=vrow["zip"],
+                    raw={
+                        "manual": True,
+                        "url": url,
+                        "saved_at": _now_iso(),
+                        "page_text": page_text or "",
+                    },
+                )
+                change = SyncEngine(c2, ManualSource()).upsert(row, vrow["model_key"])
+                parts = [f"listing info saved ({change.replace('_', ' ')})"]
+                if url and page_text is None:
+                    parts.append("page fetch failed — typed values only")
+                elif url and (price_in is None or miles_in is None):
+                    found = [
+                        f"price ${price:,.0f}" if price_in is None and price is not None else None,
+                        f"{miles:,.0f} mi" if miles_in is None and miles is not None else None,
+                    ]
+                    found = [f for f in found if f]
+                    parts.append(
+                        "from page: " + ", ".join(found) if found else "page had no price/miles"
+                    )
+                pipeline = build_rescore_pipeline(c2, settings, datetime.now(UTC).year)
+                parts.append(pipeline.score_vin(vin, profile, progress=progress))
+                return " · ".join(parts)
+            finally:
+                c2.close()
+
+        if not _start_job("listing update", work):
+            return _flash_redirect("A job is already running — wait for it to finish.")
+        return RedirectResponse(f"/v/{vin}", status_code=303)
+
     @app.post("/refresh/{vin}")
     def refresh_one(vin: str):
         """Refresh a single car — one Auto.dev call + a rescore of that VIN."""
