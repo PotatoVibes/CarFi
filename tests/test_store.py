@@ -21,6 +21,25 @@ def test_ranked_matches_orders_and_hides_excluded(seeded_settings):
     assert rows_all[-1].verdict == "excluded"
 
 
+def test_ranked_matches_sorts_score_desc_then_price_asc(seeded_settings):
+    from conftest import _add_vehicle
+
+    conn = _conn(seeded_settings)
+    # Same verdict: higher total first; equal totals tie-break on price
+    # ascending; unpriced cars land after priced ones.
+    _add_vehicle(conn, "SORT_HI", "c8_stingray", "ranked", 95.0, price=70000)
+    _add_vehicle(conn, "SORT_LO_CHEAP", "c8_stingray", "ranked", 90.0, price=55000)
+    _add_vehicle(conn, "SORT_LO_DEAR", "c8_stingray", "ranked", 90.0, price=65000)
+    _add_vehicle(conn, "SORT_LO_NOPRICE", "c8_stingray", "ranked", 90.0, price=None)
+    # A favorite must NOT jump ahead of higher-scored cars.
+    conn.execute(
+        "UPDATE vehicles SET favorited_at='2026-07-16T00:00:00Z' WHERE vin='SORT_LO_DEAR'"
+    )
+    conn.commit()
+    vins = [r.vin for r in store.ranked_matches(conn, "c8_stingray") if r.vin.startswith("SORT")]
+    assert vins == ["SORT_HI", "SORT_LO_CHEAP", "SORT_LO_DEAR", "SORT_LO_NOPRICE"]
+
+
 def test_ranked_matches_new_flag(seeded_settings):
     conn = _conn(seeded_settings)
     rows = store.ranked_matches(conn, "c8_stingray", since="2026-07-16T00:00:00Z")

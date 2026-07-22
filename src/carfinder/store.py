@@ -124,9 +124,17 @@ def ranked_matches(
         matches = [m for m in matches if m.verdict != "excluded"]
     if not include_dismissed:
         matches = [m for m in matches if not m.dismissed]
-    # Favorites float to the top of their verdict group; dismissed sink last.
+    # Verdict, then score (desc), then price (asc, unpriced last); dismissed
+    # sink to the bottom. Favorites keep their heart but no longer jump the
+    # ranking — the owner reads the list as a pure leaderboard.
     matches.sort(
-        key=lambda m: (m.dismissed, _VERDICT_RANK.get(m.verdict, 9), not m.favorited, -m.total)
+        key=lambda m: (
+            m.dismissed,
+            _VERDICT_RANK.get(m.verdict, 9),
+            -m.total,
+            m.price is None,
+            m.price if m.price is not None else 0.0,
+        )
     )
     return matches
 
@@ -237,3 +245,150 @@ def match_counts(conn: sqlite3.Connection, model_key: str) -> dict[str, int]:
 def latest_sync(conn: sqlite3.Connection) -> dict[str, Any] | None:
     r = conn.execute("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT 1").fetchone()
     return dict(r) if r else None
+
+
+# --- Unicorn arrival tracking ----------------------------------------------
+# A "unicorn" clears every hard requirement AND lands in a preferred color, at
+# or under the mileage cap, with a highlight bonus at/above a threshold. The
+# point of tracking them over time is to measure how often one actually appears
+# so a wait can be planned. first_seen (when *we* first ingested the VIN) is the
+# arrival clock — it only becomes a real arrival rate once the tool has been
+# syncing incrementally for a sustained window; a one-time bulk backfill stamps
+# everything with a single date (the CLI surfaces that so the history isn't
+# mistaken for observed arrivals).
+
+
+@dataclass
+class UnicornRow:
+    vin: str
+    model_key: str
+    first_seen: str
+    created_at: str | None  # source's listing-live date (survivorship-biased)
+    dealer: str | None
+    state: str | None
+    price: float | None
+    miles: int | None
+    color_family: str | None
+    paint_name: str | None
+    total: float
+    highlight_bonus: float
+    status: str
+    dismissed: bool
+    favorited: bool
+
+
+@dataclass
+class UnicornMonth:
+    month: str  # 'YYYY-MM' of first_seen
+    cars: int  # raw count of qualifying VINs
+    events: int  # distinct (dealer, day) clusters — guards against one dealer
+    # listing a batch of near-identical cars reading as many independent arrivals
+    states: list[str]
+
+
+def unicorn_arrivals(
+    conn: sqlite3.Connection,
+    model_key: str,
+    preferred_colors: list[str],
+    min_bonus: float = 5.0,
+    miles_cap: int = 60000,
+    since: str | None = None,
+    include_dismissed: bool = True,
+) -> list[UnicornRow]:
+    """Cars meeting the unicorn bar for a model, ordered by first_seen (arrival).
+
+    `preferred_colors` and `miles_cap` come from the profile so this stays in
+    sync with the config rather than hardcoding the definition. Price is not
+    filtered here: the scorer already excludes over-budget cars (price soft
+    constraint with exclude_beyond_hard), so any 'ranked' car is within budget.
+    Dismissed cars are kept by default — a dismissal is a per-car decision that
+    shouldn't distort the market-rate measurement.
+    """
+    if not preferred_colors:
+        return []
+    placeholders = ",".join("?" for _ in preferred_colors)
+    params: list[Any] = [model_key, min_bonus, miles_cap, *[c.lower() for c in preferred_colors]]
+    sql = f"""
+        SELECT v.vin, m.model_key, v.first_seen,
+               (SELECT MIN(l.created_at) FROM listings l
+                WHERE l.vin = m.vin AND l.created_at IS NOT NULL) AS created_at,
+               v.dealer, v.state,
+               v.price, v.miles, m.color_family, m.paint_name, m.total,
+               m.highlight_bonus, v.status, v.dismissed_at, v.favorited_at
+        FROM match_results m
+        JOIN vehicles v ON v.vin = m.vin
+        WHERE m.model_key = ?
+          AND m.verdict = 'ranked'
+          AND m.highlight_bonus >= ?
+          AND v.miles IS NOT NULL AND v.miles <= ?
+          AND LOWER(m.color_family) IN ({placeholders})
+    """  # noqa: S608 -- placeholders are '?' count only; all values are bound params
+    if since:
+        sql += " AND v.first_seen >= ?"
+        params.append(since)
+    sql += " ORDER BY v.first_seen, v.vin"
+    rows = conn.execute(sql, params).fetchall()
+    result = [
+        UnicornRow(
+            vin=r["vin"],
+            model_key=r["model_key"],
+            first_seen=r["first_seen"],
+            created_at=r["created_at"],
+            dealer=r["dealer"],
+            state=r["state"],
+            price=r["price"],
+            miles=r["miles"],
+            color_family=r["color_family"],
+            paint_name=r["paint_name"],
+            total=r["total"],
+            highlight_bonus=r["highlight_bonus"],
+            status=r["status"],
+            dismissed=bool(r["dismissed_at"]),
+            favorited=bool(r["favorited_at"]),
+        )
+        for r in rows
+    ]
+    if not include_dismissed:
+        result = [u for u in result if not u.dismissed]
+    return result
+
+
+def unicorn_rate_by_month(rows: list[UnicornRow]) -> list[UnicornMonth]:
+    """Aggregate unicorn arrivals by first_seen month. `events` collapses each
+    (dealer, day) into one — a dealer listing a batch of near-identical cars is
+    one arrival opportunity, not N, and shouldn't inflate the observed rate."""
+    from collections import defaultdict
+
+    buckets: dict[str, list[UnicornRow]] = defaultdict(list)
+    for r in rows:
+        buckets[r.first_seen[:7]].append(r)
+    out: list[UnicornMonth] = []
+    for month in sorted(buckets):
+        group = buckets[month]
+        # Null dealer → its own event (keyed by VIN) so distinct cars aren't merged.
+        events = {(r.dealer or r.vin, r.first_seen[:10]) for r in group}
+        states = sorted({r.state for r in group if r.state})
+        out.append(UnicornMonth(month=month, cars=len(group), events=len(events), states=states))
+    return out
+
+
+def observation_window(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """first_seen span + the single busiest ingest day (a bulk backfill shows up
+    as one day holding most rows). Lets callers flag how much of the arrival
+    history is genuinely observed vs. stamped by a one-time load."""
+    span = conn.execute(
+        "SELECT MIN(first_seen) AS lo, MAX(first_seen) AS hi, COUNT(*) AS n FROM listings"
+    ).fetchone()
+    if span is None or span["n"] == 0:
+        return None
+    busiest = conn.execute(
+        """SELECT substr(first_seen, 1, 10) AS day, COUNT(*) AS n
+           FROM listings GROUP BY day ORDER BY n DESC LIMIT 1"""
+    ).fetchone()
+    return {
+        "first": span["lo"],
+        "last": span["hi"],
+        "total": span["n"],
+        "busiest_day": busiest["day"],
+        "busiest_day_count": busiest["n"],
+    }
