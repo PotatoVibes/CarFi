@@ -26,7 +26,7 @@ from . import vin as vin_decode
 from .budget import BudgetGuard
 from .colors import ColorFamily
 from .config import Settings, load_settings
-from .db import bootstrap
+from .db import bootstrap, connect
 from .pipeline import PipelineStats
 from .profiles import ProfileError, load_profile
 from .runner import load_profiles
@@ -122,8 +122,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "error": None,
     }
 
+    # Migrate once at startup; page handlers then open plain connections.
+    # Running the migration check per request re-acquired the schema lock on
+    # every page view — cheap locally, painfully slow over a Docker bind mount.
+    bootstrap(settings.db_path).close()
+
     def conn():
-        return bootstrap(settings.db_path)
+        return connect(settings.db_path)
 
     def _start_job(kind: str, work) -> bool:
         """Run `work(progress_cb)` in a background thread; False if one is
