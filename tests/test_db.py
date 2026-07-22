@@ -20,6 +20,18 @@ def test_migrate_sets_latest_version_and_is_idempotent():
     assert [r[0] for r in rows] == [v for v, _ in db.MIGRATIONS]
 
 
+def test_ui_read_indexes_exist():
+    """Migration 12: board/detail queries must be index lookups, not scans of
+    listings (whose raw_json payloads make a scan cost tens of MB of I/O)."""
+    conn = _mem()
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert {"idx_match_results_model_verdict", "idx_listings_vin"} <= names
+    plan = conn.execute(
+        "EXPLAIN QUERY PLAN SELECT url FROM listings WHERE vin = ?", ("X",)
+    ).fetchall()
+    assert any("idx_listings_vin" in r[-1] for r in plan)
+
+
 def test_api_calls_table_exists():
     conn = _mem()
     cols = {r[1] for r in conn.execute("PRAGMA table_info(api_calls)")}

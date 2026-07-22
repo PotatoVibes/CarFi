@@ -40,6 +40,20 @@ def test_ranked_matches_sorts_score_desc_then_price_asc(seeded_settings):
     assert vins == ["SORT_HI", "SORT_LO_CHEAP", "SORT_LO_DEAR", "SORT_LO_NOPRICE"]
 
 
+def test_ranked_matches_dismissed_hidden_unless_requested(seeded_settings):
+    from conftest import _add_vehicle
+
+    conn = _conn(seeded_settings)
+    _add_vehicle(conn, "DIS_VIN", "c8_stingray", "ranked", 99.0, price=60000)
+    conn.execute("UPDATE vehicles SET dismissed_at='2026-07-16T00:00:00Z' WHERE vin='DIS_VIN'")
+    conn.commit()
+    assert "DIS_VIN" not in [r.vin for r in store.ranked_matches(conn, "c8_stingray")]
+    rows = store.ranked_matches(conn, "c8_stingray", include_dismissed=True)
+    vins = [r.vin for r in rows]
+    # Included on request, but sinks below every live car despite the top score.
+    assert vins[-1] == "DIS_VIN" and rows[-1].dismissed is True
+
+
 def test_ranked_matches_new_flag(seeded_settings):
     conn = _conn(seeded_settings)
     rows = store.ranked_matches(conn, "c8_stingray", since="2026-07-16T00:00:00Z")

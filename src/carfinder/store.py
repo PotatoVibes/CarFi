@@ -77,8 +77,10 @@ def ranked_matches(
     hidden unless requested. Rows with first_seen > `since` are flagged is_new
     (for 'new since visit'). With `home_zip`, distance_mi is computed from it
     to each car's listing zip (centroid-to-centroid, offline)."""
-    rows = conn.execute(
-        """
+    # Filter in SQL, not Python: the default view shows a few dozen cars out of
+    # thousands of rows, and fetching the excluded bulk just to drop it was the
+    # slowest part of every board render.
+    sql = """
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
                v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at,
@@ -87,9 +89,12 @@ def ranked_matches(
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
         WHERE m.model_key = ?
-        """,
-        (model_key,),
-    ).fetchall()
+        """
+    if not include_excluded:
+        sql += " AND m.verdict != 'excluded'"
+    if not include_dismissed:
+        sql += " AND v.dismissed_at IS NULL"
+    rows = conn.execute(sql, (model_key,)).fetchall()
 
     matches = [
         MatchRow(
@@ -120,10 +125,6 @@ def ranked_matches(
         )
         for r in rows
     ]
-    if not include_excluded:
-        matches = [m for m in matches if m.verdict != "excluded"]
-    if not include_dismissed:
-        matches = [m for m in matches if not m.dismissed]
     # Verdict, then score (desc), then price (asc, unpriced last); dismissed
     # sink to the bottom. Favorites keep their heart but no longer jump the
     # ranking — the owner reads the list as a pure leaderboard.

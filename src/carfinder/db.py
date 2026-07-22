@@ -235,6 +235,18 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE match_results ADD COLUMN paint_name TEXT;
         """,
     ),
+    (
+        12,
+        """
+        -- UI-read indexes. Every board/detail render filters match_results by
+        -- (model_key, verdict) and looks listings up by VIN; without these the
+        -- lookups were full scans (listings drags its raw_json payloads — tens
+        -- of MB per page view once the DB grew past a few thousand cars).
+        CREATE INDEX idx_match_results_model_verdict
+            ON match_results (model_key, verdict);
+        CREATE INDEX idx_listings_vin ON listings (vin);
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
