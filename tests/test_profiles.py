@@ -21,9 +21,10 @@ def test_seed_profiles_load():
     # checked by kind (not key) so tuning the min year doesn't break this.
     assert {c.key for c in c8.hard} >= {"z51", "magneride", "convertible"}
     assert any(c.kind == "year_min" for c in c8.hard)
+    # head_up_display was dropped from the seed via the config UI (2026-07-22)
+    # — assert only the requirements the owner still counts as non-negotiable.
     assert {c.key for c in bw.hard} >= {
         "manual_transmission",
-        "head_up_display",
         "ventilated_seats",
     }
 

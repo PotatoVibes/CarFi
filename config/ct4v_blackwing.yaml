@@ -5,11 +5,12 @@ model_key: ct4v_blackwing
 query:
   make: Cadillac
   model: CT4,CT4-V
-  trim: V Blackwing
+  trim: null
   year_min: null
   year_max: null
   price_max: null
-  price_margin: 0.4
+  price_margin: 0.08
+  marketcheck_model: CT4
 hard:
 - key: model_ct4v_blackwing
   label: CT4-V Blackwing
@@ -46,16 +47,6 @@ hard:
     rpo:
     - KU9
     sticker_text: VENTILATED
-  min_year: null
-- key: head_up_display
-  label: Head-Up Display
-  kind: require
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo:
-    - UV6
-    sticker_text: HEAD-UP DISPLAY|HEAD UP DISPLAY|HUD
   min_year: null
 soft:
 - key: miles
@@ -96,7 +87,6 @@ soft:
   - yellow
   - green
   penalized:
-  - red
   - white
   - black
   neutral_score: 50.0
@@ -158,14 +148,6 @@ highlights:
     rpo:
     - 5CS
     sticker_text: null
-- label: Interior Trim Pkg Wrapped Suede
-  bonus: 1.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo:
-    - IWE
-    sticker_text: null
 - label: Caliper Color Red
   bonus: 2.0
   matcher:
@@ -181,5 +163,21 @@ highlights:
     vin_any: []
     rpo:
     - GXU
+    sticker_text: null
+- label: Display,Headup
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - UV6
+    sticker_text: null
+- label: Caliper Color Blue
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - J6B
     sticker_text: null
 review_on_unknown_hard: true

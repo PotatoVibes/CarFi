@@ -36,7 +36,7 @@ hard:
   label: 2021 or newer
   kind: year_min
   matcher: null
-  min_year: 2021
+  min_year: 2022
 - key: convertible
   label: Convertible (hardtop)
   kind: require
@@ -103,7 +103,7 @@ soft:
   ideal: 60000.0
   hard: 66000.0
   direction: lower_better
-  exclude_beyond_hard: false
+  exclude_beyond_hard: true
   preferred: []
   penalized: []
   neutral_score: 50.0
@@ -121,7 +121,6 @@ soft:
   - yellow
   - green
   penalized:
-  - red
   - white
   - black
   - brown
@@ -237,5 +236,21 @@ highlights:
     vin_any: []
     rpo:
     - J6E
+    sticker_text: null
+- label: Seat Frt Bkt, Sport, Body Contoured
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - AH2
+    sticker_text: null
+- label: Seat,Front Bucket,Driver,Passenger,Reclining
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - AQ9
     sticker_text: null
 review_on_unknown_hard: true
