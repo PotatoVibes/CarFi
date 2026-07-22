@@ -50,16 +50,21 @@ _C8_PAINT: dict[str, ColorFamily] = {
     # yellow / orange
     "GCK": ColorFamily.yellow,  # Accelerate Yellow # VERIFY
     "GXH": ColorFamily.orange,  # Amplify Orange    # VERIFY
-    "GB8": ColorFamily.orange,  # Sebring Orange    # VERIFY
-    # brown
-    "G26": ColorFamily.brown,  # Caffeine          # VERIFY
-    "G1W": ColorFamily.brown,  # Zeus Bronze        # VERIFY
+    # GB8 removed 2026-07-22: seeded as "Sebring Orange", but zero corpus
+    # occurrences and G26 is the code Sebring Orange stickers actually carry.
+    # 2026-07-22 corpus audit (sticker exterior line x option G-code, all
+    # VERIFIED): the earlier "Caffeine"/"Zeus Bronze" brown guesses were wrong.
+    "G26": ColorFamily.orange,  # Sebring Orange (3 stickers)
+    "G1W": ColorFamily.white,  # White Pearl Metallic (8 stickers)
     # other
     "GXL": ColorFamily.other,  # Hysteria Purple — VERIFIED (corpus sticker)
 }
 
 _CT4V_PAINT: dict[str, ColorFamily] = {
-    "GSK": ColorFamily.blue,  # Electric Blue       # VERIFY
+    # GSK was seeded as "Electric Blue" — WRONG: the one GSK sticker in the
+    # corpus (1G6D65RPXN0460404, 2026-07-22) reads INFRARED TINTCOAT.
+    # Electric Blue's real code is unknown; the text fallback covers it.
+    "GSK": ColorFamily.red,  # Infrared Tintcoat — VERIFIED
     "GKZ": ColorFamily.red,  # Velocity Red         # VERIFY
     "G7C": ColorFamily.red,  # Infrared Tintcoat    # VERIFY
     "GAZ": ColorFamily.white,  # Summit White       # VERIFY
@@ -90,8 +95,9 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("CARBON FLASH", ColorFamily.black),
     # GM marketing names that carry no family word (2026-07-16 corpus audit).
     ("DEEP SPACE", ColorFamily.blue),
-    ("RIFT METALLIC", ColorFamily.white),
+    # DRIFT before RIFT: "RIFT METALLIC" is a substring of "DRIFT METALLIC".
     ("DRIFT METALLIC", ColorFamily.gray),
+    ("RIFT METALLIC", ColorFamily.white),
     ("TYPHOON", ColorFamily.gray),
     ("MAVERICK NOIR", ColorFamily.black),
     ("NOIR", ColorFamily.black),
@@ -99,6 +105,10 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("WAVE METALLIC", ColorFamily.blue),
     ("HYSTERIA", ColorFamily.other),
     ("PURPLE", ColorFamily.other),
+    # Dealer-feed shorthands seen in Marketcheck data (2026-07-22 audit).
+    ("BURGUNDY", ColorFamily.red),
+    ("MIST", ColorFamily.red),  # bare "Mist" = Red Mist (only GM Mist paint here)
+    ("PINK", ColorFamily.other),
     ("BLUE", ColorFamily.blue),
     ("RED", ColorFamily.red),
     ("WHITE", ColorFamily.white),
