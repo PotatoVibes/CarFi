@@ -556,8 +556,10 @@ def test_full_pass_walks_each_model_year_separately():
     c8 = load_profile(ROOT / "config" / "c8_stingray.yaml")
     stats = pipe.run(c8, mode="full", run_id="r1")
 
-    # One single-year walk per year in the profile's band (2021..2027).
-    assert src.year_params == [f"{y}-{y}" for y in range(2021, 2028)]
+    # One single-year walk per year in the profile's band (year floor derived
+    # from the profile so tuning the config doesn't break this test).
+    year_lo = next(c.min_year for c in c8.hard if c.kind == "year_min")
+    assert src.year_params == [f"{y}-{y}" for y in range(year_lo, 2028)]
     assert stats.sync.new_vins == 2  # both years' cars ingested
     assert stats.sync.truncated is False
     rows = {

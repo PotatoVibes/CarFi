@@ -191,6 +191,11 @@ class ListingQuery(BaseModel):
     year_max: int | None = None  # else current year + 1
     price_max: float | None = None  # else derived from the price soft hard bound
     price_margin: float = Field(default=0.08, ge=0)  # widen a derived price ceiling
+    # Marketcheck's model taxonomy differs from Auto.dev's (no comma-lists, no
+    # separate trim filter; Blackwings are likely their own model). When set,
+    # this overrides `model` for Marketcheck queries only. Tune in YAML if a
+    # sync warns about zero Marketcheck results.
+    marketcheck_model: str | None = None
 
 
 class Profile(BaseModel):

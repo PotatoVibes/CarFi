@@ -6,6 +6,7 @@ BudgetGuard — there is no other path to the network here.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -13,7 +14,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
-from .budget import AUTODEV, BudgetGuard
+from .budget import AUTODEV, MARKETCHECK, BudgetGuard
 from .query import SELECT_FIELDS
 
 log = logging.getLogger("carfinder.sources")
@@ -276,18 +277,137 @@ class ManualSource:
         raise NotImplementedError("manual listings have no feed to walk")
 
 
-# --- Marketcheck (stub, disabled) ------------------------------------------
+# --- Marketcheck -----------------------------------------------------------
+
+# Marketcheck's api key travels as a query param, so an httpx error string can
+# embed it in the URL. Scrub before any error text is logged or surfaced.
+_KEY_RE = re.compile(r"(api_key=)[^&\s]+", re.IGNORECASE)
+
+
+def scrub_api_key(text: str) -> str:
+    return _KEY_RE.sub(r"\1REDACTED", text)
+
+
+def normalize_marketcheck(item: dict[str, Any], source: str = "marketcheck") -> ListingRow:
+    """Map a raw Marketcheck listing into a ListingRow.
+
+    Marketcheck's shape differs from Auto.dev's: spec fields live under a
+    nested ``build`` object, seller/location under ``dealer``, and timestamps
+    come as both epoch (``first_seen_at``) and ISO (``first_seen_at_date``).
+    `_first` walks either flat or nested paths, so the candidate lists below
+    tolerate both and any minor field drift.
+    """
+    return ListingRow(
+        vin=str(_first(item, "vin", "build.vin") or "").upper(),
+        source=source,
+        price=_as_float(_first(item, "price", "msrp")),
+        miles=_as_int(_first(item, "miles")),
+        year=_as_int(_first(item, "build.year", "year")),
+        make=_first(item, "build.make", "make"),
+        model=_first(item, "build.model", "model"),
+        trim=_first(item, "build.trim", "trim"),
+        color=_first(item, "exterior_color", "base_ext_color", "build.std_seating"),
+        # Prefer the ISO date; fall back to the epoch value if that's all there is.
+        created_at=_as_str(_first(item, "first_seen_at_date", "first_seen_at")),
+        url=_as_url(_first(item, "vdp_url", "vdp_url_cached")),
+        dealer=_as_str(_first(item, "dealer.name", "dealer.dealership_group_name")),
+        city=_as_str(_first(item, "dealer.city")),
+        state=_as_str(_first(item, "dealer.state")),
+        zip=_as_str(_first(item, "dealer.zip")),
+        raw=item,
+    )
+
+
+# Auto.dev's protocol sort token -> Marketcheck's (sort_by, sort_order) pair.
+# dos_active ascending = fewest days-on-site first = newest first, and the
+# order is STABLE (a listing's DOS only grows), which makes the incremental
+# known-page early stop sound — last_seen reshuffles on every crawl. Bonus:
+# a relisted car's DOS resets, so it floats back up and gets re-seen.
+# Only the default is mapped; an explicit sort_by in params always wins.
+_MC_SORT = {"createdAt.desc": ("dos_active", "asc")}
 
 
 class MarketcheckSource:
-    """Protocol-conforming stub. Disabled by default: the free tier's 100-mile
-    radius makes it a Houston-local supplement at best (see PLAN.md M3)."""
+    """Marketcheck Listings API client (free tier). Protocol-conforming.
+
+    Every outbound call flows through BudgetGuard under the ``marketcheck``
+    provider — there is no un-gated path to the network here, exactly like
+    AutoDevSource. Not yet wired into the sync pipeline; the live probe
+    (`carfinder marketcheck-probe`) is currently the only caller, used to
+    settle the undocumented free-tier radius behavior before committing to a
+    full integration (see PLAN.md M3 + docs).
+
+    Free-tier constraints baked into the defaults: 50 rows/page max, 5 req/s.
+    """
 
     name = "marketcheck"
-    enabled = False
+    enabled = True
+    BASE_URL = "https://api.marketcheck.com/v2"
 
-    def __init__(self, *args: Any, **kwargs: Any):
-        pass
+    def __init__(
+        self,
+        api_key: str,
+        guard: BudgetGuard,
+        client: httpx.Client | None = None,
+        page_size: int = 50,  # free-tier per-page cap
+        min_interval_s: float = 0.25,  # <= 4 req/s, under the 5/s tier limit
+        max_retries: int = 4,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
+        self._guard = guard
+        self._api_key = api_key
+        self._page_size = page_size
+        self._min_interval = min_interval_s
+        self._max_retries = max_retries
+        self._sleep = sleep
+        self._last_request_at: float | None = None
+        self._client = client or httpx.Client(
+            base_url=self.BASE_URL,
+            headers={"Accept": "application/json"},
+            timeout=30.0,
+        )
+
+    def _rate_limit(self) -> None:
+        if self._last_request_at is not None:
+            elapsed = time.monotonic() - self._last_request_at
+            if elapsed < self._min_interval:
+                self._sleep(self._min_interval - elapsed)
+        self._last_request_at = time.monotonic()
+
+    def _get(self, path: str, params: dict, endpoint: str, run_id: str | None) -> dict:
+        # api_key travels as a query param (Marketcheck has no header auth).
+        # Injected here so every call carries it; the probe scrubs it from any
+        # surfaced error string, and we log the logical endpoint, never the URL.
+        params = {**params, "api_key": self._api_key}
+        backoff = 1.0
+        last_exc: httpx.HTTPStatusError | None = None
+        for attempt in range(1, self._max_retries + 1):
+            self._rate_limit()
+            with self._guard.reserve(MARKETCHECK, endpoint, run_id=run_id):
+                resp = self._client.get(path, params=params)
+            if resp.status_code in _RETRYABLE:
+                retry_after = resp.headers.get("retry-after")
+                wait = float(retry_after) if (retry_after or "").isdigit() else backoff
+                # Log the status + endpoint only — never the URL (holds the key).
+                log.warning(
+                    "marketcheck %s HTTP %d (attempt %d) — waiting %.1fs",
+                    endpoint,
+                    resp.status_code,
+                    attempt,
+                    wait,
+                )
+                try:
+                    last_exc = resp.raise_for_status()  # type: ignore[assignment]
+                except httpx.HTTPStatusError as exc:
+                    last_exc = exc
+                self._sleep(wait)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"marketcheck {endpoint}: retries exhausted")
 
     def search_page(
         self,
@@ -296,4 +416,54 @@ class MarketcheckSource:
         sort: str = "createdAt.desc",
         run_id: str | None = None,
     ) -> Page:
-        raise NotImplementedError("MarketcheckSource is disabled (free-tier 100-mile radius)")
+        """Fetch one page of active dealer listings.
+
+        `params` are Marketcheck-native (make/model/year/price_range/zip/radius/
+        …); pagination is derived from `page`. The protocol's `sort` token is
+        translated to Marketcheck's sort_by/sort_order, but an explicit sort_by
+        already in `params` wins.
+        """
+        start = (page - 1) * self._page_size
+        q: dict[str, str] = {**params, "rows": str(self._page_size), "start": str(start)}
+        if "sort_by" not in q and sort in _MC_SORT:
+            q["sort_by"], q["sort_order"] = _MC_SORT[sort]
+        data = self._get("/search/car/active", q, "search.active", run_id)
+        return self._to_page(data, start)
+
+    def facets(
+        self, params: dict[str, str], fields: list[str], run_id: str | None = None
+    ) -> tuple[int | None, dict[str, list[tuple[str, int]]]]:
+        """Value distributions over the filtered result set — ONE gated call.
+
+        E.g. facets({"make": "Cadillac"}, ["model"]) returns every Cadillac
+        model name in Marketcheck's taxonomy with its active-listing count:
+        the ground truth for a profile's `marketcheck_model`. rows=0 keeps the
+        payload to facets only. Returns (num_found, {field: [(value, count),
+        ...]}); a field the API didn't echo back maps to an empty list.
+        """
+        q: dict[str, str] = {**params, "rows": "0", "facets": ",".join(fields)}
+        data = self._get("/search/car/active", q, "search.facets", run_id)
+        raw = data.get("facets") or {}
+        out: dict[str, list[tuple[str, int]]] = {}
+        for field_name in fields:
+            items = raw.get(field_name) or []
+            pairs: list[tuple[str, int]] = []
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                value = it.get("item", it.get("value"))
+                count = it.get("count")
+                if value is not None and count is not None:
+                    pairs.append((str(value), int(count)))
+            out[field_name] = pairs
+        total = data.get("num_found") if isinstance(data, dict) else None
+        return total, out
+
+    def _to_page(self, data: dict, start: int) -> Page:
+        items = data.get("listings", []) if isinstance(data, dict) else []
+        rows = [normalize_marketcheck(item, self.name) for item in items]
+        total = data.get("num_found") if isinstance(data, dict) else None
+        # Marketcheck has no next-link; a next page exists iff we haven't walked
+        # past num_found (and this page came back full).
+        has_next = bool(total is not None and start + len(rows) < total and len(rows) > 0)
+        return Page(rows=rows, total=total, has_next=has_next, raw=data)

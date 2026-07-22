@@ -32,10 +32,10 @@ from .buildsheet import vehicle_kwargs as sheet_vehicle_kwargs
 from .config import Settings
 from .models import Profile, Provenance, Vehicle
 from .notify import Notifier
-from .query import build_listing_params
+from .query import build_listing_params, build_marketcheck_params
 from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
-from .sources import AutoDevSource, ListingSource
+from .sources import AutoDevSource, ListingSource, MarketcheckSource, scrub_api_key
 from .sticker_parser import PARSER_VERSION, ParsedSticker, parse_sticker, vehicle_kwargs
 from .stickers import FOUND, StickerFetcher
 from .sync import SyncEngine, SyncStats
@@ -70,6 +70,10 @@ class PipelineStats:
     ai_cost_usd: float = 0.0
     ai_budget_exhausted: bool = False
     notified: int = 0
+    # Marketcheck secondary-source walk (full passes only). None when the
+    # source isn't configured or the run was incremental.
+    mc_sync: SyncStats | None = None
+    mc_failed: bool = False  # a Marketcheck segment died — delist was skipped
 
 
 class Pipeline:
@@ -86,6 +90,7 @@ class Pipeline:
         notify_threshold: float = 85.0,
         buildsheet_fetcher: BuildSheetFetcher | None = None,
         max_buildsheets_per_run: int = 100,
+        secondary_source: ListingSource | None = None,
     ):
         self._conn = conn
         self._fetcher = fetcher
@@ -94,6 +99,12 @@ class Pipeline:
         # rescore() needs no source; run() does (guarded).
         self._source = source
         self._engine = SyncEngine(conn, source, now=now) if source is not None else None
+        # Secondary source (Marketcheck): full passes only. Walked BEFORE the
+        # primary so the primary's values win the vehicles-row last-writer-
+        # wins on VINs both feeds carry.
+        self._mc_engine = (
+            SyncEngine(conn, secondary_source, now=now) if secondary_source is not None else None
+        )
         self._current_year = current_year
         self._now = now or (lambda: datetime.now(UTC))
         self._max_stickers = max_stickers_per_run
@@ -141,21 +152,39 @@ class Pipeline:
         if self._engine is None:
             raise ValueError("run() needs a listing source; none was configured")
         params = build_listing_params(profile, self._current_year)
+        mc_stats: SyncStats | None = None
+        mc_failed = False
         if mode == "full":
+            # Marketcheck (secondary) walks first so the primary's values win
+            # the vehicles-row last-writer-wins; a car both feeds carry ends up
+            # displaying Auto.dev's numbers.
+            mc_stats, mc_failed = self._sync_marketcheck_full(profile, run_id, progress)
             # Full passes walk deep, and Auto.dev's pagination window ends at
             # 2,000 results per query (observed live: page 101 refused). Walk
-            # each model year separately — every year fits the window.
-            sync_stats = self._sync_full_segmented(params, profile, run_id, progress)
+            # each model year separately — every year fits the window. Delist
+            # runs inside, on the union of everything EITHER feed saw.
+            sync_stats = self._sync_full_segmented(
+                params,
+                profile,
+                run_id,
+                progress,
+                extra_seen=set(mc_stats.seen_vins) if mc_stats is not None else set(),
+                extra_truncated=mc_failed or bool(mc_stats is not None and mc_stats.truncated),
+            )
         else:
             # Incremental stops at the first known page, far inside any
             # window — a single newest-first walk is correct and cheapest.
+            # Marketcheck gets the same treatment: dos_active-asc is a stable
+            # newest-first order, so the known-page stop is sound there too.
+            mc_stats, mc_failed = self._sync_marketcheck_incremental(profile, run_id, progress)
             sync_stats = self._engine.sync(
                 params, profile.model_key, mode=mode, run_id=run_id, progress=progress
             )
-        stats = PipelineStats(sync=sync_stats)
+        stats = PipelineStats(sync=sync_stats, mc_sync=mc_stats, mc_failed=mc_failed)
         attributes = _profile_attributes(profile) if self._extractor is not None else []
 
-        todo = list(dict.fromkeys(sync_stats.new_or_changed))  # de-dupe, keep order
+        todo = sync_stats.new_or_changed + (mc_stats.new_or_changed if mc_stats else [])
+        todo = list(dict.fromkeys(todo))  # de-dupe across sources, keep order
         self._score_batch(todo, profile, attributes, sync_stats.run_id, stats, progress)
 
         if stats.sticker_capped:
@@ -266,30 +295,118 @@ class Pipeline:
             else "scored"
         )
 
-    def _sync_full_segmented(self, params, profile, run_id, progress) -> SyncStats:
+    def _sync_full_segmented(
+        self,
+        params,
+        profile,
+        run_id,
+        progress,
+        extra_seen: set[str] | None = None,
+        extra_truncated: bool = False,
+    ) -> SyncStats:
         """One full walk per model year, merged; delist runs once on the union.
 
         Per-segment delisting would wrongly count every other year's cars as
         missing, and a truncated walk can't distinguish 'sold' from 'beyond
         the provider's window' — so delist is skipped entirely on truncation.
+        `extra_seen`/`extra_truncated` fold in a secondary source's walk: a car
+        only Marketcheck still lists is not missing, and an incomplete
+        Marketcheck walk poisons absence-evidence exactly like a truncated
+        primary walk does.
         """
+        extra_seen = extra_seen or set()
         years = _segment_years(params.get("vehicle.year"))
         if not years:  # no year range to slice on — single walk as before
-            return self._engine.sync(
-                params, profile.model_key, mode="full", run_id=run_id, progress=progress
-            )
-
-        base = run_id or uuid4().hex
-        merged = SyncStats(run_id=base, mode="full")
-        for year in years:
-            seg = self._engine.sync(
-                {**params, "vehicle.year": f"{year}-{year}"},
+            merged = self._engine.sync(
+                params,
                 profile.model_key,
                 mode="full",
-                run_id=f"{base}-y{year}",
-                progress=(lambda msg, y=year: progress(f"{y}: {msg}")) if progress else None,
+                run_id=run_id,
+                progress=progress,
                 delist=False,
             )
+        else:
+            base = run_id or uuid4().hex
+            merged = SyncStats(run_id=base, mode="full")
+            for year in years:
+                seg = self._engine.sync(
+                    {**params, "vehicle.year": f"{year}-{year}"},
+                    profile.model_key,
+                    mode="full",
+                    run_id=f"{base}-y{year}",
+                    progress=(lambda msg, y=year: progress(f"{y}: {msg}")) if progress else None,
+                    delist=False,
+                )
+                merged.pages_fetched += seg.pages_fetched
+                merged.new_vins += seg.new_vins
+                merged.updated_vins += seg.updated_vins
+                merged.price_changes += seg.price_changes
+                merged.new_or_changed.extend(seg.new_or_changed)
+                merged.seen_vins.extend(seg.seen_vins)
+                merged.truncated |= seg.truncated
+
+        if merged.truncated or extra_truncated:
+            log.warning(
+                "%s full pass truncated — skipping delist detection (absence is "
+                "not evidence of a sale when the walk was incomplete)",
+                profile.model_key,
+            )
+        else:
+            merged.presumed_sold = self._engine.detect_delist(
+                profile.model_key, set(merged.seen_vins) | extra_seen
+            )
+        return merged
+
+    def _sync_marketcheck_full(self, profile, run_id, progress) -> tuple[SyncStats | None, bool]:
+        """Walk Marketcheck for a full pass: one segment per model year, plus
+        a no-price sweep.
+
+        Year segmentation keeps every query under the free tier's 500-row
+        window (single `year` values — the ranged `year_range` param stays in
+        the incremental path where walks are shallow). The sweep re-runs the
+        query with has_price=false and no price bound: `price_range` silently
+        excludes "call for price" listings (documented), and an unpriced car
+        can still be a unicorn — the scorer treats unknown price neutrally.
+
+        Segments are isolated: a dead one (HTTP failure past retries) is
+        logged and skipped so the secondary source can never sink the run; any
+        failure flags `failed` so the caller skips delisting. Returns
+        (stats-or-None, failed).
+        """
+        if self._mc_engine is None:
+            return None, False
+        try:
+            params = build_marketcheck_params(profile, self._current_year)
+        except ValueError:
+            return None, False
+
+        base = f"{run_id or uuid4().hex}-mc"
+        merged = SyncStats(run_id=base, mode="full")
+        failed = False
+
+        def walk(seg_params: dict, seg_run_id: str, label: str) -> None:
+            nonlocal failed
+            try:
+                seg = self._mc_engine.sync(
+                    seg_params,
+                    profile.model_key,
+                    mode="full",
+                    run_id=seg_run_id,
+                    progress=(lambda msg, pre=label: progress(f"{pre}: {msg}"))
+                    if progress
+                    else None,
+                    delist=False,
+                )
+            except BudgetExceeded as exc:
+                log.warning("marketcheck budget exhausted — walk abandoned: %s", exc)
+                failed = True
+                raise
+            except httpx.HTTPError as exc:
+                # Scrub: Marketcheck carries the api key as a query param, so
+                # httpx error strings can embed it in the URL.
+                log.warning("%s segment failed: %s", label, scrub_api_key(str(exc)))
+                failed = True
+                return
             merged.pages_fetched += seg.pages_fetched
             merged.new_vins += seg.new_vins
             merged.updated_vins += seg.updated_vins
@@ -298,17 +415,65 @@ class Pipeline:
             merged.seen_vins.extend(seg.seen_vins)
             merged.truncated |= seg.truncated
 
-        if merged.truncated:
+        years = _segment_years(params.get("year_range"))
+        try:
+            for year in years or [None]:
+                if year is None:
+                    seg_params, seg_id, label = params, base, "marketcheck"
+                else:
+                    # Single-year `year` param per segment; drop the range key.
+                    seg_params = {k: v for k, v in params.items() if k != "year_range"}
+                    seg_params["year"] = str(year)
+                    seg_id, label = f"{base}-y{year}", f"marketcheck {year}"
+                walk(seg_params, seg_id, label)
+
+            # No-price sweep: same filter minus the price bound. Only worth a
+            # call when a price bound exists (otherwise the walk above already
+            # covered unpriced cars).
+            if "price_range" in params:
+                sweep = {k: v for k, v in params.items() if k != "price_range"}
+                sweep["has_price"] = "false"
+                walk(sweep, f"{base}-noprice", "marketcheck no-price")
+        except BudgetExceeded:
+            pass  # already logged; keep whatever was ingested before the cap
+
+        if not failed and not merged.seen_vins:
             log.warning(
-                "%s full pass truncated — skipping delist detection (absence is "
-                "not evidence of a sale when the walk was incomplete)",
+                "marketcheck returned ZERO listings for %s — check the profile's "
+                "query.marketcheck_model against their model taxonomy",
                 profile.model_key,
             )
-        else:
-            merged.presumed_sold = self._engine.detect_delist(
-                profile.model_key, set(merged.seen_vins)
+        return merged, failed
+
+    def _sync_marketcheck_incremental(
+        self, profile, run_id, progress
+    ) -> tuple[SyncStats | None, bool]:
+        """Cheap Marketcheck incremental: ONE newest-first walk per model
+        (dos_active asc — stable order) with the known-page early stop, so a
+        quiet market costs a single call. Ranged `year_range` is fine here —
+        the walk stops far inside the 500-row window. Coverage duties (year
+        segmentation, no-price sweep, delist evidence) stay with the weekly
+        full pass. Failures are logged and flagged, never raised.
+        """
+        if self._mc_engine is None:
+            return None, False
+        try:
+            params = build_marketcheck_params(profile, self._current_year)
+        except ValueError:
+            return None, False
+        try:
+            stats = self._mc_engine.sync(
+                params,
+                profile.model_key,
+                mode="incremental",
+                run_id=f"{run_id or uuid4().hex}-mc",
+                progress=(lambda msg: progress(f"marketcheck: {msg}")) if progress else None,
+                delist=False,
             )
-        return merged
+        except (BudgetExceeded, httpx.HTTPError) as exc:
+            log.warning("marketcheck incremental failed: %s", scrub_api_key(str(exc)))
+            return None, True
+        return stats, False
 
     def _process_vin(self, vin, profile, attributes, run_id, stats: PipelineStats) -> None:
         row = self._conn.execute(
@@ -522,6 +687,7 @@ class Pipeline:
             # The FE suspension code is as definitive as a VIN char — it joins
             # the facts so Z51/MagneRide resolve on build-sheet-only cars.
             kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
+            self._fallback_listing_color(kw, model_key, row)
             return Vehicle(**kw)
 
         if parsed is not None:
@@ -534,16 +700,7 @@ class Pipeline:
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
             kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
-            # If neither the paint code nor the sticker's marketing name maps
-            # to a color family, fall back to the listing's color text (both
-            # text paths score as claimed provenance anyway).
-            listing_color = row["color"] if row else None
-            if (
-                colors.family_from_rpo(model_key, kw.get("paint_rpo")) is None
-                and colors.family_from_text(kw.get("color_text")) is None
-                and colors.family_from_text(listing_color) is not None
-            ):
-                kw["color_text"] = listing_color
+            self._fallback_listing_color(kw, model_key, row)
             return Vehicle(**kw)
 
         # No sticker: VIN facts (verified) + listing data (claimed).
@@ -558,13 +715,30 @@ class Pipeline:
             claimed_features=claimed_features,
         )
 
+    @staticmethod
+    def _fallback_listing_color(kw: dict, model_key: str, row) -> None:
+        """If neither the paint code nor the OEM document's marketing name maps
+        to a color family, fall back to the listing's color text (both text
+        paths score as claimed provenance anyway). Applies to sticker AND
+        build-sheet cars — sheets often carry no paint line at all."""
+        listing_color = row["color"] if row else None
+        if (
+            colors.family_from_rpo(model_key, kw.get("paint_rpo")) is None
+            and colors.family_from_text(kw.get("color_text")) is None
+            and colors.family_from_text(listing_color) is not None
+        ):
+            kw["color_text"] = listing_color
+
     def _log_conflicts(self, vin: str, model_key: str, parsed, row) -> None:
-        """Detect + persist sticker-vs-listing disagreements.
+        """Detect + persist cross-source disagreements for one car.
 
         Only genuinely apples-to-apples fields are compared: model year and
         resolved color family. (Brand strings like sticker "CHEVY" vs listing
         "Chevrolet", and factory-vs-generic color names, would be spurious.)
-        OEM build data would slot in here as a middle tier when available.
+        Listing facts are per-feed (listing:autodev, listing:marketcheck, ...)
+        so two feeds disagreeing about the same car surfaces on the conflicts
+        page; the vehicles row is only used as a fallback when no listings
+        exist (e.g. a hand-tracked VIN).
         """
         facts: list[Facts] = []
         if parsed is not None:
@@ -580,7 +754,23 @@ class Pipeline:
                     exterior=fam.value if fam else None,
                 )
             )
-        if row is not None:
+        listing_facts = 0
+        for lr in self._conn.execute(
+            "SELECT source, year, color FROM listings WHERE vin = ?", (vin,)
+        ).fetchall():
+            fam = colors.family_from_text(lr["color"])
+            if lr["year"] is None and fam is None:
+                continue  # nothing comparable from this feed
+            facts.append(
+                Facts(
+                    source=f"listing:{lr['source']}",
+                    provenance=Provenance.claimed,
+                    year=lr["year"],
+                    exterior=fam.value if fam else None,
+                )
+            )
+            listing_facts += 1
+        if listing_facts == 0 and row is not None:
             fam = colors.family_from_text(row["color"])
             facts.append(
                 Facts(
@@ -638,6 +828,12 @@ class Pipeline:
 def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pipeline:
     guard = BudgetGuard.from_settings(conn, settings)
     source = AutoDevSource(settings.autodev_api_key, guard) if with_source else None
+    # Marketcheck rides along whenever its key is present (full passes only).
+    secondary = (
+        MarketcheckSource(settings.marketcheck_api_key, guard)
+        if with_source and settings.marketcheck_api_key
+        else None
+    )
     fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
     buildsheet_fetcher = BuildSheetFetcher(conn, guard)
     extractor = (
@@ -655,6 +851,7 @@ def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pi
         notifier=notifier,
         notify_threshold=settings.notify_threshold,
         buildsheet_fetcher=buildsheet_fetcher,
+        secondary_source=secondary,
     )
 
 

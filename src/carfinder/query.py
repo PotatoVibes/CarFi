@@ -83,3 +83,44 @@ def build_listing_params(profile: Profile, current_year: int) -> dict[str, str]:
         # Lower bound 1 drops $0 "call for price" placeholder rows.
         params["retailListing.price"] = f"1-{int(price_hi)}"
     return params
+
+
+def build_marketcheck_params(profile: Profile, current_year: int) -> dict[str, str]:
+    """Marketcheck-native query params for a profile (no pagination/sort).
+
+    Deliberately looser than the Auto.dev query: no trim/body_type/
+    transmission filters even though the API has them — those map to HARD
+    requirements (convertible, manual), and a feed mislabel on a binding
+    constraint would hide a car unrecoverably. The scorer's hard gate and the
+    VIN fast path handle them for free. Bounds derivation matches
+    build_listing_params.
+
+    Years go in `year_range` ("min-max" — the documented range param; the
+    plain `year` param is single/comma values only and silently reads
+    "2022-2030" as 2022, verified live 2026-07-21). Full passes still explode
+    the range into single-`year` segment queries to stay under the free
+    tier's 500-row window per query.
+    """
+    q = profile.query
+    if q is None:
+        raise ValueError(f"profile {profile.model_key!r} has no query block")
+
+    year_lo = q.year_min if q.year_min is not None else _year_min(profile)
+    year_hi = q.year_max if q.year_max is not None else current_year + 1
+
+    price_hi = q.price_max
+    if price_hi is None:
+        hard = _price_hard_bound(profile)
+        price_hi = round(hard * (1 + q.price_margin)) if hard is not None else None
+
+    params: dict[str, str] = {
+        "make": q.make,
+        "model": q.marketcheck_model or q.model,
+    }
+    if year_lo is not None and year_hi is not None:
+        params["year_range"] = f"{year_lo}-{year_hi}"
+    elif year_lo is not None:
+        params["year"] = str(year_lo)
+    if price_hi is not None:
+        params["price_range"] = f"1-{int(price_hi)}"
+    return params

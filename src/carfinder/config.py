@@ -36,10 +36,12 @@ class Settings:
     db_path: Path
     autodev_api_key: str | None
     anthropic_api_key: str | None
+    marketcheck_api_key: str | None
     monthly_call_cap_autodev: int
     monthly_ai_budget_usd: float
     monthly_call_cap_gm: int
     monthly_call_cap_buildsheet: int
+    monthly_call_cap_marketcheck: int
     stickers_dir: Path
     config_dir: Path
     notify_webhook_url: str | None
@@ -58,10 +60,14 @@ def load_settings(env_file: Path | None = None) -> Settings:
         db_path=Path(os.environ.get("CARFINDER_DB_PATH") or "data/carfinder.sqlite"),
         autodev_api_key=os.environ.get("AUTODEV_API_KEY") or None,
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
+        marketcheck_api_key=os.environ.get("MARKETCHECK_API_KEY") or None,
         monthly_call_cap_autodev=int(os.environ.get("MONTHLY_CALL_CAP_AUTODEV") or "800"),
         monthly_ai_budget_usd=float(os.environ.get("MONTHLY_AI_BUDGET_USD") or "2"),
         monthly_call_cap_gm=int(os.environ.get("MONTHLY_CALL_CAP_GM") or "1000"),
         monthly_call_cap_buildsheet=int(os.environ.get("MONTHLY_CALL_CAP_BUILDSHEET") or "1000"),
+        # Free tier = 500 calls/mo; cap at 400 to leave a buffer (mirrors the
+        # Auto.dev 1,000 -> 800 pattern). Enforced by BudgetGuard.
+        monthly_call_cap_marketcheck=int(os.environ.get("MONTHLY_CALL_CAP_MARKETCHECK") or "400"),
         stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR") or "stickers"),
         config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR") or "config"),
         notify_webhook_url=os.environ.get("NOTIFY_WEBHOOK_URL") or None,

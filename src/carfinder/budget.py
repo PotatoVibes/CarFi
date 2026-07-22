@@ -29,6 +29,7 @@ AUTODEV = "autodev"
 ANTHROPIC = "anthropic"
 GM_STICKER = "gm_sticker"
 BUILDSHEET = "gm_buildsheet"
+MARKETCHECK = "marketcheck"
 
 # Metering kinds.
 COUNT = "count"
@@ -96,6 +97,11 @@ class BudgetGuard:
             # cap is a politeness backstop like the sticker endpoint's.
             BUILDSHEET: ProviderBudget(
                 BUILDSHEET, COUNT, float(settings.monthly_call_cap_buildsheet)
+            ),
+            # Marketcheck secondary source (free tier = 500 calls/mo). A count
+            # cap like Auto.dev's — no live call may bypass this gate.
+            MARKETCHECK: ProviderBudget(
+                MARKETCHECK, COUNT, float(settings.monthly_call_cap_marketcheck)
             ),
         }
         return cls(conn, providers)

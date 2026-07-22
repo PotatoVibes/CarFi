@@ -23,8 +23,18 @@ from .sticker_parser import ParsedSticker
 # Comparable scalar attributes (options handled separately as sets).
 SCALAR_FIELDS = ("year", "make", "model", "trim", "msrp", "paint_rpo", "exterior")
 
-# Lower rank = higher precedence.
-SOURCE_RANK = {"sticker": 0, "build": 1, "listing": 2, "listing_text": 3}
+# Lower rank = higher precedence. Per-feed listing facts rank below the
+# generic "listing" tier with the primary feed first — Auto.dev wins a
+# listing-vs-listing tie, and any disagreement is still logged as a conflict.
+SOURCE_RANK = {
+    "sticker": 0,
+    "build": 1,
+    "listing": 2,
+    "listing:autodev": 3,
+    "listing:marketcheck": 4,
+    "listing:manual": 5,
+    "listing_text": 6,
+}
 
 
 @dataclass
