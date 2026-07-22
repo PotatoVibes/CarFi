@@ -358,12 +358,13 @@ def test_highlight_bonus_capped():
         highlights=[
             Highlight(label="a", bonus=8, matcher=Matcher(sticker_text="AAA")),
             Highlight(label="b", bonus=6, matcher=Matcher(sticker_text="BBB")),
+            Highlight(label="c", bonus=5, matcher=Matcher(sticker_text="CCC")),
         ],
     )
-    v = Vehicle(verified_text="AAA BBB", sticker_complete=True)
+    v = Vehicle(verified_text="AAA BBB CCC", sticker_complete=True)
     r = score_vehicle(p, v)
-    assert r.highlight_bonus == HIGHLIGHT_CAP  # 8 + 6 = 14, capped at 10
-    assert sorted(b.label for b in r.highlights if b.matched) == ["a", "b"]
+    assert r.highlight_bonus == HIGHLIGHT_CAP  # 8 + 6 + 5 = 19, capped at 15
+    assert sorted(b.label for b in r.highlights if b.matched) == ["a", "b", "c"]
 
 
 def test_claimed_highlight_still_adds_bonus():
@@ -422,7 +423,9 @@ def test_seed_c8_fully_loaded_verified_car_ranks_high():
     known = [s for s in r.soft if s.dim_score is not None]
     assert all(s.dim_score == pytest.approx(100.0) for s in known)
     assert r.soft_score == pytest.approx(100.0)
-    assert r.highlight_bonus == pytest.approx(HIGHLIGHT_CAP)  # 8 + 4 capped at 10
+    # Front lift (8) + performance exhaust (4): under the +15 cap, so the
+    # full sum comes through.
+    assert r.highlight_bonus == pytest.approx(12.0)
 
 
 def test_seed_c8_suspension_facts_decide_z51_and_magneride():

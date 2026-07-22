@@ -4,7 +4,7 @@ Pipeline per vehicle:
   1. Hard gate (verified-only pass/fail; unknown -> needs review; claimed can
      never satisfy a hard requirement).
   2. Soft dimensions -> weighted 0–100 score (linear penalty curves).
-  3. Highlights -> bonus, capped at +10 total.
+  3. Highlights -> bonus, capped at +15 total.
 Output carries a per-requirement breakdown with a provenance tag on each.
 """
 
@@ -25,7 +25,7 @@ from .models import (
     Vehicle,
 )
 
-HIGHLIGHT_CAP = 10.0
+HIGHLIGHT_CAP = 15.0
 
 
 @dataclass(frozen=True)
