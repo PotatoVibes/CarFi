@@ -44,6 +44,10 @@ def test_ct4_blackwing_vs_non_blackwing():
     # 2023's unified DL5 series covered both transmissions -> model only.
     assert decode("1G6DL5RPXP0410176") == {"model": "BLACKWING"}
     assert decode("1G6DH5RL5P0123651") == {"model": "NON_BLACKWING"}  # 2.7T CT4-V
+    # 2.0T (engine K) — base/Luxury CT4s, never a Blackwing. Real VINs from
+    # the live Marketcheck CT4 sample (2026-07-21).
+    assert decode("1G6DJ5RK8N0130912") == {"model": "NON_BLACKWING"}
+    assert decode("1G6DB5RK0N0110165") == {"model": "NON_BLACKWING"}
 
 
 def test_malformed_vins_decode_empty():

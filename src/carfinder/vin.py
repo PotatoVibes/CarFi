@@ -16,6 +16,11 @@ C8 Corvette (1G1Y…):
 CT4 (1G6D…):
   pos 8 (engine): P = LF4 3.6TT — Blackwing-only  (10/10 stickers)
                   L = L3B 2.7T — never a Blackwing (6/6 stickers)
+                  K = LSY 2.0T — never a Blackwing (GM spec: no Blackwing ever
+                  shipped the 2.0T; the sticker corpus holds no base CT4s only
+                  because Auto.dev prefilters trim. 30/30 consistent in a live
+                  Marketcheck CT4 sample, 2026-07-21 — every 5RK car was a
+                  $9-33k base/Luxury CT4.)
   pos 5 (series, Blackwing only): 6 = 6MT manual, 7 = 10-speed automatic —
   GM certifies the two transmissions as separate configs. 6/6 consistent
   across the corpus (D65 manual 2022/2024/2025; D75 auto 2022/2024), with
@@ -99,7 +104,7 @@ def decode(vin: str | None) -> dict[str, str]:
                 facts["trans"] = "MANUAL"
             elif v[4] == "7":
                 facts["trans"] = "AUTO"
-        elif v[7] == "L":
+        elif v[7] in ("L", "K"):  # 2.7T / 2.0T — neither ever a Blackwing
             facts["model"] = "NON_BLACKWING"
     return facts
 
