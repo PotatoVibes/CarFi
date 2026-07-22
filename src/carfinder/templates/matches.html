@@ -27,6 +27,10 @@
           title="Full pass of {{ name }} only — every page, price drops + sold detection (more API calls)">
       <button type="submit" class="secondary">Full pass</button>
     </form>
+    <form method="post" action="/rescore?model={{ model_key }}" data-job style="margin:0"
+          title="Re-rank {{ name }} cars only against the current profile — cached data, ~zero API calls. Much faster than the all-models rescore on the home page.">
+      <button type="submit" class="secondary">Rescore this model</button>
+    </form>
   </span>
 </p>
 
@@ -76,7 +80,8 @@
         data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}"
         data-fav="{{ '1' if r.favorited else '' }}"
         data-dist="{{ r.distance_mi if r.distance_mi is not none else 99999 }}">
-      <td class="score">{{ "%.0f"|format(r.total) }}</td>
+      <td class="score">{{ "%.0f"|format(r.total) }}{% if r.vin in unicorn_vins
+          %} <span title="unicorn — clears every hard requirement in a preferred color, within mileage, loaded with options">🦄</span>{% endif %}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
           {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}

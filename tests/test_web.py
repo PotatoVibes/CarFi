@@ -137,6 +137,25 @@ def test_matches_color_uses_scorer_resolved_family(seeded_settings):
     assert "Rapid Blue" in r2
 
 
+def test_unicorn_icon_marks_qualifying_cars_only(seeded_settings):
+    from carfinder import db
+
+    # Seeded BW car: ranked, bonus 8 >= 5, 30k miles under the cap — but BLACK,
+    # a penalized color, so no unicorn.
+    assert "🦄" not in _client(seeded_settings).get("/m/ct4v_blackwing").text
+    # Repaint it blue (a preferred color): now it clears the whole unicorn bar.
+    conn = db.bootstrap(str(seeded_settings.db_path))
+    conn.execute("UPDATE match_results SET color_family='blue' WHERE vin=?", (BW_VIN,))
+    conn.commit()
+    conn.close()
+    assert "🦄" in _client(seeded_settings).get("/m/ct4v_blackwing").text
+
+
+def test_favicon_is_declared(seeded_settings):
+    r = _client(seeded_settings).get("/").text
+    assert '<link rel="icon" href="data:image/svg+xml' in r
+
+
 def test_detail_and_matches_chip_agree(seeded_settings):
     from carfinder.colors import FAMILY_HEX
 
@@ -355,6 +374,63 @@ def test_rescore_endpoint_runs_job_offline(seeded_settings, monkeypatch):
     r2 = c.post("/rescore", follow_redirects=False)
     assert r2.status_code == 303 and "flash=" not in r2.headers["location"]
     assert _wait_for_job(c)["state"] == "done"
+
+
+def test_rescore_scoped_to_one_model(seeded_settings, monkeypatch):
+    _stub_offline_fetchers(monkeypatch)
+    c = _client(seeded_settings)
+    # Scoped: only the 1 seeded BW car is re-scored (the 2 C8s are skipped),
+    # and the redirect returns to that model's page.
+    r = c.post("/rescore?model=ct4v_blackwing", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/m/ct4v_blackwing"
+    job = _wait_for_job(c)
+    assert job["state"] == "done", job
+    assert job["kind"] == "rescore ct4v_blackwing"
+    assert "re-scored 1 cars" in job["summary"]
+    # Unknown model: flash, no job started.
+    r2 = c.post("/rescore?model=nope", follow_redirects=False)
+    assert r2.status_code == 303 and "flash=" in r2.headers["location"]
+
+
+def test_matches_page_has_model_scoped_rescore_button(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert 'action="/rescore?model=ct4v_blackwing"' in r
+
+
+def test_job_cancel_stops_a_running_job(seeded_settings, monkeypatch):
+    # A deliberately slow fake rescore: ~10s if allowed to finish, but every
+    # progress tick is a cancellation point, so /job/cancel stops it fast.
+    from carfinder import runner
+
+    def slow_rescore(conn, settings, year, config_dir=None, progress=None, only_model=None):
+        for i in range(200):
+            progress(f"step {i}")
+            time.sleep(0.05)
+        return {}
+
+    monkeypatch.setattr(runner, "run_rescore", slow_rescore)
+    c = _client(seeded_settings)
+    assert c.post("/rescore", follow_redirects=False).status_code == 303
+    # Wait until it's actually running, then pull the plug.
+    deadline = time.monotonic() + 5
+    while c.get("/api/job").json()["job"]["state"] != "running":
+        assert time.monotonic() < deadline, "job never started"
+        time.sleep(0.02)
+    assert c.post("/job/cancel").json() == {"cancelling": True}
+    job = _wait_for_job(c)
+    assert job["state"] == "done"
+    assert "stopped by user" in job["summary"]
+    # The lock is released: a new job can start immediately.
+    assert c.post("/job/cancel").json() == {"cancelling": False}  # nothing running
+    r = c.post("/rescore?model=ct4v_blackwing", follow_redirects=False)
+    assert r.status_code == 303 and "flash=" not in r.headers["location"]
+    # Don't leak the second slow job past the test: stop it and wait it out.
+    deadline = time.monotonic() + 5
+    while c.get("/api/job").json()["job"]["state"] != "running":
+        assert time.monotonic() < deadline, "second job never started"
+        time.sleep(0.02)
+    c.post("/job/cancel")
+    _wait_for_job(c)
 
 
 # --- manually tracked VINs ---------------------------------------------------

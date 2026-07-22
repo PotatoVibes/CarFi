@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Car Finder{% endblock %}</title>
+  <!-- Favicon: the header's 🏎️ on a dark rounded tile, as a self-contained
+       SVG data URI (no static-file route needed). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23171a21'/%3E%3Ctext x='50' y='50' font-size='68' text-anchor='middle' dominant-baseline='central'%3E%F0%9F%8F%8E%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -90,6 +93,18 @@
           const s = document.createElement("span");
           s.className = "spin";
           pill.append(s, " " + job.kind + " — " + (job.detail || "working…"));
+          const stop = document.createElement("button");
+          stop.type = "button";
+          stop.textContent = "✕ stop";
+          stop.title = "Stop this job — work already done is kept";
+          stop.style.cssText = "padding:1px 8px; font-size:11px; margin-left:8px;" +
+            "background:#3a1c1c; color:#e08a8a; flex:none";
+          stop.addEventListener("click", function () {
+            stop.disabled = true;
+            stop.textContent = "stopping…";
+            fetch("/job/cancel", { method: "POST" });
+          });
+          pill.append(stop);
         } else if (job.state === "done" && sawRunning) {
           // A job we watched just finished: reload so results show immediately.
           location.reload();

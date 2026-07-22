@@ -36,6 +36,10 @@ log = logging.getLogger("carfinder.web")
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+class JobCancelled(Exception):
+    """Raised inside a background job's progress callback to stop it early."""
+
+
 def _now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -51,6 +55,21 @@ def _field(form: dict[str, list[str]], key: str, default: str = "") -> str:
     return values[0] if values else default
 
 
+def _unicorn_vins(conn, model_key: str, profile) -> set[str]:
+    """VINs on this model's board that clear the unicorn bar (same definition
+    as the `unicorns` CLI: ranked + preferred color + within the miles hard
+    bound + highlight bonus >= 5). Purely decorative — worth a 🦄."""
+    if profile is None:
+        return set()
+    color_c = next((s for s in profile.soft if s.kind == "color"), None)
+    miles_c = next((s for s in profile.soft if s.kind == "numeric" and s.attr == "miles"), None)
+    preferred = color_c.preferred if color_c else []
+    if not preferred:
+        return set()
+    cap = int(miles_c.hard) if miles_c else 60000
+    return {u.vin for u in store.unicorn_arrivals(conn, model_key, preferred, miles_cap=cap)}
+
+
 def _summarize_sync(results: dict[str, PipelineStats]) -> str:
     new = sum(s.sync.new_vins for s in results.values())
     changed = sum(s.sync.price_changes for s in results.values())
@@ -58,13 +77,18 @@ def _summarize_sync(results: dict[str, PipelineStats]) -> str:
     ranked = sum(s.ranked for s in results.values())
     fetched = sum(s.stickers_fetched for s in results.values())
     sold = sum(len(s.sync.presumed_sold) for s in results.values())
+    mc_new = sum(s.mc_sync.new_vins for s in results.values() if s.mc_sync is not None)
     parts = [f"{new} new", f"{changed} price changes", f"{scored} scored ({ranked} ranked)"]
+    if mc_new:
+        parts.append(f"{mc_new} via marketcheck")
     if fetched:
         parts.append(f"{fetched} sticker fetches")
     if sold:
         parts.append(f"{sold} presumed sold")
     if any(s.sync.truncated for s in results.values()):
         parts.append("⚠ page ceiling hit — results incomplete")
+    if any(s.mc_failed for s in results.values()):
+        parts.append("⚠ marketcheck partial — delist skipped")
     return " · ".join(parts)
 
 
@@ -87,6 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.profiles_by_key = {p.model_key: p for p in app.state.profiles}
     # One background job at a time; its live status feeds the UI status pill.
     app.state.job_lock = threading.Lock()
+    app.state.job_cancel = threading.Event()
     app.state.job = {
         "state": "idle",  # idle | running | done | error
         "kind": None,  # sync | full pass | rescore
@@ -102,9 +127,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def _start_job(kind: str, work) -> bool:
         """Run `work(progress_cb)` in a background thread; False if one is
-        already running. `work` returns a one-line summary string."""
+        already running. `work` returns a one-line summary string.
+
+        Cancellation is cooperative: /job/cancel sets an event that the
+        progress callback checks — every job reports progress at least
+        per-car/per-page, so a stop lands within about a second. Work already
+        committed stays committed (per-car results are each complete)."""
         if not app.state.job_lock.acquire(blocking=False):
             return False
+        app.state.job_cancel.clear()
         app.state.job.update(
             state="running",
             kind=kind,
@@ -115,10 +146,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             error=None,
         )
 
+        def _progress(msg: str) -> None:
+            if app.state.job_cancel.is_set():
+                raise JobCancelled()
+            app.state.job.update(detail=msg)
+
         def _run():
             try:
-                summary = work(lambda msg: app.state.job.update(detail=msg))
+                summary = work(_progress)
                 app.state.job.update(state="done", summary=summary, finished_at=_now_iso())
+            except JobCancelled:
+                app.state.job.update(
+                    state="done",
+                    summary="stopped by user — completed work kept",
+                    finished_at=_now_iso(),
+                )
             except Exception as exc:  # surface the failure in the UI, don't die silently
                 log.exception("%s job failed", kind)
                 app.state.job.update(
@@ -189,6 +231,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 home_zip=settings.home_zip,
             )
             counts = store.match_counts(c, model_key)
+            unicorn_vins = _unicorn_vins(c, model_key, profile)
         finally:
             c.close()
         resp = _TEMPLATES.TemplateResponse(
@@ -203,6 +246,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "show_dismissed": show_dismissed,
                 "chip_hex": colors.chip_hex,
                 "resolved_chip_hex": colors.resolved_chip_hex,
+                "unicorn_vins": unicorn_vins,
             },
         )
         resp.set_cookie(cookie_key, _now_iso(), max_age=60 * 60 * 24 * 365)
@@ -461,6 +505,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def job_status():
         return {"job": app.state.job}
 
+    @app.post("/job/cancel")
+    def job_cancel():
+        """Ask the running job to stop (cooperative — it lands within ~a
+        second, at the next progress tick). No-op when nothing is running."""
+        if app.state.job["state"] == "running":
+            app.state.job_cancel.set()
+            app.state.job.update(detail="stopping…")
+            return {"cancelling": True}
+        return {"cancelling": False}
+
     def _sync_work(mode: str, only_model: str | None = None):
         def work(progress):
             from .runner import run_sync
@@ -682,7 +736,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return RedirectResponse(f"/v/{vin}", status_code=303)
 
     @app.post("/rescore")
-    def rescore_now():
+    def rescore_now(model: str | None = None):
+        # Scoped to one model when requested (the per-model button): a full
+        # rescore walks every car in the DB — thousands — for no benefit when
+        # only one profile changed.
+        if model is not None and model not in app.state.profiles_by_key:
+            return _flash_redirect(f"Unknown model {model!r}.")
+
         def work(progress):
             from .runner import run_rescore
 
@@ -694,13 +754,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     datetime.now(UTC).year,
                     config_dir=settings.config_dir,
                     progress=progress,
+                    only_model=model,
                 )
             finally:
                 c.close()
             return _summarize_rescore(results)
 
-        if not _start_job("rescore", work):
+        kind = f"rescore {model}" if model else "rescore"
+        if not _start_job(kind, work):
             return _flash_redirect("A job is already running — wait for it to finish.")
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(f"/m/{model}" if model else "/", status_code=303)
 
     return app
