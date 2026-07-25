@@ -1,0 +1,80 @@
+{
+  "url": null,
+  "code": 200,
+  "data": {
+    "isMulDecode": false,
+    "make": null,
+    "model": null,
+    "year": 0,
+    "submodels": null,
+    "isExtraMake": false,
+    "vinInfos": [
+      {
+        "make": "Toyota",
+        "model": null,
+        "year": 0,
+        "isExtraMake": false,
+        "vehicleInfo": "2020 Toyota GR Supra",
+        "requiredInfo": "2020 Toyota GR Supra",
+        "optionalInfo": "United States Of America; 6 Cyl 3.0L TWIN SCROLL TURBO; Coupe; Base; Automatic Transmission; 8-Speed Automatic Transmission; Left-Hand Drive Vehicles; DB43L-ZRLA",
+        "redirectUrl": "/page_product/category?vin=WZ1DB4C08LW027514&filter=()",
+        "picturePath": "/resources/part-image/seo/model/toyota-gr-supra/2020-current-toyota-gr-supra.jpg",
+        "vehicleInformation": [
+          {
+            "name": "Productiondate",
+            "desc": "2019-09"
+          },
+          {
+            "name": "CatalogCode",
+            "desc": "291440"
+          },
+          {
+            "name": "FrameNo.",
+            "desc": "DB43"
+          },
+          {
+            "name": "Vehicle",
+            "desc": "2020 Toyota GR Supra"
+          }
+        ],
+        "majorAttribute": [
+          {
+            "name": "Destination",
+            "desc": "USA-United States Of America"
+          },
+          {
+            "name": "Engine Model",
+            "desc": "B58-6 Cyl 3.0L TWIN SCROLL TURBO"
+          },
+          {
+            "name": "Body Type",
+            "desc": "CP-Coupe"
+          },
+          {
+            "name": "Trim Level",
+            "desc": "BASE-Base"
+          },
+          {
+            "name": "Auto or Manual Trans",
+            "desc": "ATM-Automatic Transmission"
+          },
+          {
+            "name": "Gear Shift Type",
+            "desc": "8FC-8-Speed Automatic Transmission"
+          },
+          {
+            "name": "Driver's Position",
+            "desc": "LHD-Left-Hand Drive Vehicles"
+          },
+          {
+            "name": "Model Code",
+            "desc": "DB43L-ZRLA-DB43L-ZRLA"
+          }
+        ],
+        "specification": []
+      }
+    ],
+    "picturePath": null
+  },
+  "message": null
+}

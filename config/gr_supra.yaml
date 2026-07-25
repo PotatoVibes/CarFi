@@ -5,12 +5,15 @@
 # 2023+ — and every 2020-2022 VIN pattern is corpus-verified automatic — so
 # the 2023+ year gate narrows the query without trusting any listing field.
 #
-# Verification reality (2026-07-24 research): 3.0 vs 2.0 is VIN-verified
-# (pos 6). Transmission is verified via toyotapartsdeal's factory ATM/MTM
-# field. "Premium" is NOT VIN-encoded and the parts catalog labels a real
-# Premium car "BASE", so the Premium gate rides Premium-exclusive equipment
-# markers (JBL / head-up display) and listing text into needs_review until
-# the katashiki model code is corpus-mapped to trims.
+# Verification reality (2026-07-24 research + fixture capture): 3.0 vs 2.0
+# is VIN-verified (pos 6), and 2020-22 cars are VIN-verified automatic. For
+# 2023+ neither the VIN nor toyotapartsdeal can verify the transmission —
+# the parts catalog collapses trims (a real A91-MT manual and a Premium auto
+# return identical, self-contradictory attributes; see partsdeal.py) — so
+# manual 2023+ cars ride claimed listing text into needs_review for a human
+# eyeball, exactly like the M2. "Premium" likewise: NOT VIN-encoded, catalog
+# says "BASE" even for real Premiums, so the gate rides Premium-exclusive
+# equipment markers (JBL / head-up display) and listing text into review.
 name: GR Supra 3.0 Premium
 model_key: gr_supra
 query:
@@ -56,7 +59,7 @@ hard:
     vin_any:
     - MANUAL
     rpo: []
-    sticker_text: \bMTM\b|6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION|\b6MT\b
+    sticker_text: 6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION|\b6MT\b
   min_year: null
 - key: trim_premium
   label: 3.0 Premium equipment

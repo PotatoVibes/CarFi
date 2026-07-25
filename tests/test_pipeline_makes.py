@@ -31,7 +31,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 M2_VIN = "3MF23DM09S8F25064"  # real 2025 G87 6MT (Cars & Bids)
 SUPRA_MT_VIN = "WZ1DB0G06PW056034"  # real 2023 A91-MT manual
-SUPRA_AUTO20_VIN = "WZ1DB4C01LW022039"  # real 2020 Launch Ed. (VIN-verified auto)
+SUPRA_PREMIUM_VIN = "WZ1DB0G07PW059282"  # real 2023 3.0 Premium automatic
+SUPRA_AUTO20_VIN = "WZ1DB4C01LW022039"  # real 2020 Launch Ed. (VIN-verified auto;
+# no fixture on purpose — the VIN fast path must exclude it before any fetch)
 
 
 class Clock:
@@ -61,45 +63,14 @@ def _forbidden_transport(label: str) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-def _toyota_payload(trans: str) -> dict:
-    return {
-        "data": {
-            "vinInfos": [
-                {
-                    "vehicleInfo": "2023 Toyota GR Supra",
-                    "majorAttribute": [
-                        {"name": "Engine Model", "desc": "B58-3.0L"},
-                        {"name": "Trim", "desc": "BASE"},
-                        {"name": "Trans", "desc": trans},
-                        {"name": "Model Code", "desc": "DB03L-XXXX"},
-                    ],
-                    "vehicleInformation": [],
-                    "specification": [],
-                }
-            ]
-        }
-    }
+FIXTURES = Path(__file__).parent / "fixtures" / "partsdeal"
 
 
-def _bmw_payload() -> dict:
-    return {
-        "data": {
-            "vinInfos": [
-                {
-                    "vehicleInfo": "2025 BMW M2",
-                    "majorAttribute": [
-                        {"name": "Trim", "desc": "1959-Base"},
-                        {"name": "Engine", "desc": "765-6 Cyl 3.0 L GAS"},
-                    ],
-                    "vehicleInformation": [],
-                    "specification": [],
-                }
-            ]
-        }
-    }
+def _fixture(vin: str) -> dict:
+    return json.loads((FIXTURES / f"{vin}.json").read_text(encoding="utf-8"))
 
 
-def _pipeline(rows, toyota_trans="MTM"):
+def _pipeline(rows):
     conn = db.bootstrap(":memory:")
     guard = BudgetGuard(
         conn,
@@ -124,23 +95,17 @@ def _pipeline(rows, toyota_trans="MTM"):
         conn, guard, client=_forbidden_transport("gmpartsgiant"), min_interval_s=0.0
     )
 
-    def pd_client(make: str, payload: dict) -> httpx.Client:
-        return httpx.Client(
-            base_url=SITES[make][0],
-            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=payload)),
-        )
+    def pd_client(make: str) -> httpx.Client:
+        # Serve the recorded fixture for whatever VIN is requested.
+        def handler(request: httpx.Request) -> httpx.Response:
+            vin = json.loads(request.read())["vin"]
+            return httpx.Response(200, json=_fixture(vin))
+
+        return httpx.Client(base_url=SITES[make][0], transport=httpx.MockTransport(handler))
 
     partsdeal = {
-        "bmw": PartsDealFetcher(
-            conn, guard, "bmw", client=pd_client("bmw", _bmw_payload()), min_interval_s=0.0
-        ),
-        "toyota": PartsDealFetcher(
-            conn,
-            guard,
-            "toyota",
-            client=pd_client("toyota", _toyota_payload(toyota_trans)),
-            min_interval_s=0.0,
-        ),
+        make: PartsDealFetcher(conn, guard, make, client=pd_client(make), min_interval_s=0.0)
+        for make in ("bmw", "toyota")
     }
     pipe = Pipeline(
         conn,
@@ -183,29 +148,56 @@ def test_m2_routes_to_bmw_partsdeal_never_gm():
     assert stats.needs_review == 1
 
 
-def test_supra_manual_verified_by_partsdeal_mtm():
-    rows = [_row(SUPRA_MT_VIN, year=2023, make="Toyota", model="GR Supra", trim="3.0 Premium")]
-    pipe, conn = _pipeline(rows, toyota_trans="MTM")
+def test_2023_supra_catalog_never_verifies_transmission():
+    """The recorded fixture for this factory-MANUAL car (A91-MT) carries the
+    catalog's wrong 'ATM' attribute AND a '6-Speed Manual' gear-shift line.
+    Neither may verify nor fail the manual requirement: the listing text
+    (claimed) routes it to needs_review for a human, and the Premium gate
+    stays claimed-only too."""
+    rows = [
+        _row(
+            SUPRA_MT_VIN,
+            year=2023,
+            make="Toyota",
+            model="GR Supra",
+            trim="A91-MT 6-Speed Manual",
+        )
+    ]
+    pipe, conn = _pipeline(rows)
     profile = load_profile(ROOT / "config" / "gr_supra.yaml")
     stats = pipe.run(profile, run_id="r1")
     assert stats.scored == 1
     hard = _hard(conn, SUPRA_MT_VIN)
     assert hard["model_supra"]["status"] == "pass"
     assert hard["engine_30"]["status"] == "pass"  # VIN pos-6, verified
-    # The factory MTM field is definitive: manual verified-passes.
-    assert hard["manual_transmission"]["status"] == "pass"
-    assert hard["manual_transmission"]["provenance"] == "verified"
-    # Premium rides claimed evidence (listing trim text) into review.
+    # Claimed listing text, never the catalog: needs_review, claimed.
+    assert hard["manual_transmission"]["status"] == "needs_review"
+    assert hard["manual_transmission"]["provenance"] == "claimed"
+    assert stats.buildsheets_fetched == 1  # the partsdeal call happened...
+    assert stats.stickers_fetched == 0  # ...and no GM endpoint was touched
+
+
+def test_2023_premium_auto_is_not_verified_manual():
+    """Regression pin for the fixture-caught bug: the automatic Premium's
+    catalog payload contains '6-Speed Manual Floor Shift'. Had that reached
+    verified_text, this car would verified-PASS manual. It must not."""
+    rows = [_row(SUPRA_PREMIUM_VIN, year=2023, make="Toyota", model="GR Supra", trim="3.0 Premium")]
+    pipe, conn = _pipeline(rows)
+    profile = load_profile(ROOT / "config" / "gr_supra.yaml")
+    pipe.run(profile, run_id="r1")
+    hard = _hard(conn, SUPRA_PREMIUM_VIN)
+    assert hard["manual_transmission"]["status"] == "needs_review"
+    assert hard["manual_transmission"]["provenance"] != "verified"
+    # Premium claimed via listing trim text -> review, not a silent pass.
     assert hard["trim_premium"]["status"] == "needs_review"
+    assert hard["trim_premium"]["provenance"] == "claimed"
 
 
 def test_2020_supra_vin_fast_path_excludes_before_any_fetch():
     # 2020-22 Supra VINs are corpus-verified automatic: the VIN fast path must
-    # exclude on the manual requirement with ZERO evidence fetches. The
-    # partsdeal transport returning MTM (wrong on purpose) proves it was
-    # never consulted: had it been, the car would have PASSED manual.
+    # exclude on the manual requirement with ZERO evidence fetches.
     rows = [_row(SUPRA_AUTO20_VIN, year=2020, make="Toyota", model="GR Supra", trim="3.0 Premium")]
-    pipe, conn = _pipeline(rows, toyota_trans="MTM")
+    pipe, conn = _pipeline(rows)
     profile = load_profile(ROOT / "config" / "gr_supra.yaml")
     stats = pipe.run(profile, run_id="r1")
     assert stats.excluded == 1

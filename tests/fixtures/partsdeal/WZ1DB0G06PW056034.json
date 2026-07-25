@@ -1,0 +1,80 @@
+{
+  "url": null,
+  "code": 200,
+  "data": {
+    "isMulDecode": false,
+    "make": null,
+    "model": null,
+    "year": 0,
+    "submodels": null,
+    "isExtraMake": false,
+    "vinInfos": [
+      {
+        "make": "Toyota",
+        "model": null,
+        "year": 0,
+        "isExtraMake": false,
+        "vehicleInfo": "2023 Toyota GR Supra",
+        "requiredInfo": "2023 Toyota GR Supra",
+        "optionalInfo": "United States Of America; 6 Cyl 3.0L Twin Scroll Turbo (High); Coupe; Base; Left-Hand Drive Vehicles",
+        "redirectUrl": "/page_product/category?vin=WZ1DB0G06PW056034&filter=()",
+        "picturePath": "/resources/part-image/seo/model/toyota-gr-supra/2020-current-toyota-gr-supra.jpg",
+        "vehicleInformation": [
+          {
+            "name": "Productiondate",
+            "desc": "2022-09"
+          },
+          {
+            "name": "CatalogCode",
+            "desc": "291450"
+          },
+          {
+            "name": "FrameNo.",
+            "desc": "DB07"
+          },
+          {
+            "name": "Vehicle",
+            "desc": "2023 Toyota GR Supra"
+          }
+        ],
+        "majorAttribute": [
+          {
+            "name": "Destination",
+            "desc": "USA-United States Of America"
+          },
+          {
+            "name": "Engine Model",
+            "desc": "B58H-6 Cyl 3.0L Twin Scroll Turbo (High)"
+          },
+          {
+            "name": "Body Type",
+            "desc": "CP-Coupe"
+          },
+          {
+            "name": "Trim Level",
+            "desc": "BASE-Base"
+          },
+          {
+            "name": "Auto or Manual Trans",
+            "desc": "ATM-Automatic Transmission"
+          },
+          {
+            "name": "Gear Shift Type",
+            "desc": "6F-6-Speed Manual Transmission Floor Shift"
+          },
+          {
+            "name": "Driver's Position",
+            "desc": "LHD-Left-Hand Drive Vehicles"
+          },
+          {
+            "name": "Model Code",
+            "desc": "DB07L-ZULA-DB07L-ZULA"
+          }
+        ],
+        "specification": []
+      }
+    ],
+    "picturePath": null
+  },
+  "message": null
+}

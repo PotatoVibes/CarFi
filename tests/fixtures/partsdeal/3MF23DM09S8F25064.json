@@ -1,0 +1,52 @@
+{
+  "url": null,
+  "code": 200,
+  "data": {
+    "isMulDecode": false,
+    "make": null,
+    "model": null,
+    "year": 0,
+    "submodels": null,
+    "isExtraMake": false,
+    "vinInfos": [
+      {
+        "make": "BMW",
+        "model": null,
+        "year": 0,
+        "isExtraMake": false,
+        "vehicleInfo": "2025 BMW M2",
+        "requiredInfo": "2025 BMW M2",
+        "optionalInfo": "Base; 6 Cyl 3.0 L GAS",
+        "redirectUrl": "/page_product/category?vin=3MF23DM09S8F25064&make=BMW&model=M2&year=2025&submodel=&extra1=&extra2=&filter=()",
+        "picturePath": "",
+        "vehicleInformation": [
+          {
+            "name": "Vehicle",
+            "desc": "2025 BMW M2"
+          }
+        ],
+        "majorAttribute": [
+          {
+            "name": "Trim",
+            "desc": "1959-Base"
+          },
+          {
+            "name": "Engine",
+            "desc": "765-6 Cyl 3.0 L GAS"
+          },
+          {
+            "name": "BodyNumDoors",
+            "desc": "2"
+          },
+          {
+            "name": "BodyType",
+            "desc": "Coupe"
+          }
+        ],
+        "specification": []
+      }
+    ],
+    "picturePath": null
+  },
+  "message": null
+}

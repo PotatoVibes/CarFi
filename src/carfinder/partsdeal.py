@@ -1,22 +1,28 @@
-"""BMW / Toyota per-VIN factory decode (bmwpartsdeal.com, toyotapartsdeal.com).
+"""BMW / Toyota per-VIN catalog decode (bmwpartsdeal.com, toyotapartsdeal.com).
 
 Same operator and API as the GM build-sheet source (gmpartsgiant) — verified
 live 2026-07-24: ``POST /api/vehicle/mul/decode-vin-attributes`` with
 ``{"vin": ...}``, identical response envelope. Unlike GM, these brands return
-NO factory option codes; the payload is a thin identity decode:
+NO per-VIN broadcast data (``specification: []`` on every fixture): the
+payload is a parts-CATALOG lookup — which catalog bucket the VIN falls in —
+not factory order data for the specific car.
 
-  BMW    — trim catalog id (e.g. "1959-Base"), engine, body. No transmission
-           field, matching the VIN research: a G87's gearbox is simply not
-           machine-verifiable from free sources today.
-  Toyota — transmission (``ATM``/``MTM`` + speed), production date, engine
-           model (B58/B48), and the full factory model code (katashiki,
-           e.g. "DB43L-ZRLA"), which likely encodes trim — logged verbatim
-           into the evidence text so a corpus-verified regex can graduate it
-           into a matcher later.
+Provenance ruling — CLAIMED, never verified (fixture evidence, 2026-07-24):
+the 2023 A91-MT Edition WZ1DB0G06PW056034 (factory 6-speed MANUAL) and the
+2023 3.0 Premium WZ1DB0G07PW059282 (automatic) return byte-identical catalog
+attributes: both say ``Auto or Manual Trans: ATM-Automatic`` AND ``Gear Shift
+Type: 6F-6-Speed Manual Floor Shift`` (each field wrong for one of the two
+cars), both say ``Trim Level: BASE`` (wrong for the Premium), same
+``Model Code: DB07L-ZULA``. Toyota's 2023+ catalog collapses every 3.0 into
+one entry; per-car truth does not survive. Treating any of it as verified
+would have hard-failed real manual cars and verified-passed automatics.
 
-Everything lands as identity-level VERIFIED evidence. Absence of a feature in
-these payloads is NEVER evidence of absence (``sticker_complete`` stays False
-downstream), exactly like GM build sheets.
+So: the decode contributes to ``claimed_text`` only — it can raise a soft
+score or route a hard requirement to needs_review, but can NEVER satisfy or
+fail one. The self-contradictory transmission attributes are dropped from the
+text entirely (worthless even as claims). What remains useful per VIN:
+production date and frame number (genuinely per-car), engine model as a
+claimed cross-check, and the catalog trim/model codes for corpus study.
 
 Unofficial retailer endpoints: usage stays polite (3 s between requests,
 cache-forever per VIN via the shared ``build_sheets`` table — a VIN belongs to
@@ -72,14 +78,21 @@ def _attr_pairs(info: dict, key: str) -> list[tuple[str, str]]:
     ]
 
 
+# Catalog attributes proven self-contradictory on real 2023+ Supras (see
+# module docstring): dropped from the claimed text AND never parsed into
+# fields a matcher could reach. The optionalInfo line repeats them, so it is
+# dropped wholesale too.
+_UNTRUSTWORTHY_ATTRS = re.compile(r"trans|gear shift", re.IGNORECASE)
+
+
 def parse_response(raw: dict, vin: str) -> BuildSheet | None:
-    """Parse a decode-vin-attributes payload into a (thin) BuildSheet.
+    """Parse a decode-vin-attributes payload into a thin, CLAIMED-only sheet.
 
     Returns None when the catalog doesn't know the VIN (``vinInfos: []``).
-    Key names differ per brand and aren't pinned by fixtures yet, so lookups
-    are substring-based and every attribute lands in ``text`` as an
-    ``NAME VALUE`` line — sticker_text regexes see the whole payload either
-    way, parsed fields are a convenience on top.
+    Attribute key names are fixture-pinned per brand (tests/fixtures/
+    partsdeal) but looked up by substring to tolerate drift; every kept
+    attribute lands in ``text`` as a ``NAME VALUE`` line for downstream
+    claimed-text matching.
     """
     infos = (raw.get("data") or {}).get("vinInfos") or []
     if not infos:
@@ -88,9 +101,10 @@ def parse_response(raw: dict, vin: str) -> BuildSheet | None:
 
     major = _attr_pairs(info, "majorAttribute")
     vinfo = _attr_pairs(info, "vehicleInformation")
+    kept = [(n, d) for n, d in major + vinfo if not _UNTRUSTWORTHY_ATTRS.search(n)]
 
     def find(*needles: str) -> str | None:
-        for name, desc in major + vinfo:
+        for name, desc in kept:
             low = name.lower()
             if any(n in low for n in needles):
                 return desc
@@ -98,16 +112,15 @@ def parse_response(raw: dict, vin: str) -> BuildSheet | None:
 
     vehicle_line = str(info.get("vehicleInfo") or "")
     ym = _LEAD_YEAR.match(vehicle_line)
-    lines = [f"{n} {d}" for n, d in major + vinfo]
-    text = "\n".join([vehicle_line, str(info.get("optionalInfo") or ""), *lines]).upper()
+    text = "\n".join([vehicle_line, *(f"{n} {d}" for n, d in kept)]).upper()
 
     return BuildSheet(
         vin=vin,
         year=int(ym.group(1)) if ym else None,
-        # Toyota's katashiki ("Model Code DB43L-ZRLA") is the closest thing
-        # to a model string; BMW payloads fall back to the vehicle line.
+        # Toyota's catalog model code ("DB07L-ZULA") is the closest thing to
+        # a model string; BMW payloads fall back to the vehicle line.
         model_string=find("model code") or (vehicle_line or None),
-        transmission=find("trans"),
+        transmission=None,  # catalog trans data is disproven — never surfaced
         engine=find("engine"),
         production_date=find("production"),
         paint_rpo=None,  # neither brand returns paint through this API
@@ -115,23 +128,6 @@ def parse_response(raw: dict, vin: str) -> BuildSheet | None:
         options=set(),  # no factory option codes for these brands
         text=text,
     )
-
-
-def sheet_facts(make: str, sheet: BuildSheet) -> dict[str, str]:
-    """Definitive identity facts derivable from a partsdeal decode.
-
-    Toyota's ``Trans`` attribute is factory order data: ``MTM`` (manual) /
-    ``ATM`` (automatic) — verified both ways, like a VIN char. BMW payloads
-    carry no transmission, so no fact is ever derived (never guess).
-    """
-    if make != "toyota" or not sheet.transmission:
-        return {}
-    t = sheet.transmission.upper()
-    if "MTM" in t or "MANUAL" in t:
-        return {"trans": "MANUAL"}
-    if "ATM" in t or "AUTOMATIC" in t:
-        return {"trans": "AUTO"}
-    return {}
 
 
 class PartsDealFetcher:

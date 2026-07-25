@@ -33,7 +33,6 @@ from .config import Settings
 from .models import Profile, Provenance, Vehicle
 from .notify import Notifier
 from .partsdeal import PartsDealFetcher
-from .partsdeal import sheet_facts as partsdeal_sheet_facts
 from .query import build_listing_params, build_marketcheck_params
 from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
@@ -99,7 +98,8 @@ class Pipeline:
         self._fetcher = fetcher
         self._buildsheet = buildsheet_fetcher
         self._max_buildsheets = max_buildsheets_per_run
-        # make -> PartsDealFetcher for non-GM verified identity decodes.
+        # make -> PartsDealFetcher for non-GM catalog decodes (CLAIMED-only
+        # evidence — see partsdeal.py for the disqualification fixtures).
         self._partsdeal = partsdeal_fetchers or {}
         # rescore() needs no source; run() does (guarded).
         self._source = source
@@ -514,28 +514,29 @@ class Pipeline:
                 return
 
         # Evidence routing is make-aware: GM VINs get the window sticker ->
-        # gmpartsgiant chain; BMW/Toyota VINs get their partsdeal decoder.
-        # Calling a GM endpoint with a foreign VIN would waste GM budget AND
-        # poison the cache with a false definitive not_found.
+        # gmpartsgiant chain (per-VIN factory data, VERIFIED). BMW/Toyota
+        # VINs get their partsdeal decoder — a parts-CATALOG lookup that
+        # collapses trims, proven wrong on real cars (see partsdeal.py), so
+        # it joins the CLAIMED text only. Calling a GM endpoint with a
+        # foreign VIN would waste GM budget AND poison the cache with a
+        # false definitive not_found.
         make = vin_decode.wmi_make(vin)
         parsed, sticker_path = (
             self._maybe_sticker(vin, run_id, stats) if make == "gm" else (None, None)
         )
         sheet = None
+        catalog_text = ""
         if parsed is None:
             if make == "gm":
                 # Build-sheet decoder covers pre-2022 cars and sticker
                 # not_founds. Full options list -> AI is skipped when found.
                 sheet = self._maybe_buildsheet(vin, run_id, stats)
             elif make in self._partsdeal:
-                sheet = self._maybe_partsdeal(vin, make, run_id, stats)
-        # GM build sheets carry the full factory option list, so AI adds
-        # nothing. partsdeal decodes are identity-only (no options) — dealer
-        # text is still the only signal for option-level features there.
-        skip_ai = sheet is not None and make == "gm"
+                catalog = self._maybe_partsdeal(vin, make, run_id, stats)
+                catalog_text = catalog.text if catalog is not None else ""
         claimed_features = (
             {}
-            if skip_ai
+            if sheet is not None
             else self._ai_features(
                 vin, parsed, sticker_path, row, attributes, run_id, stats, manual_text=manual_text
             )
@@ -548,6 +549,7 @@ class Pipeline:
             claimed_features,
             sheet=sheet,
             manual_text=manual_text,
+            catalog_text=catalog_text,
         )
         result = score_vehicle(profile, vehicle)
         self._finish_vin(vin, profile, result, parsed, row, stats)
@@ -718,12 +720,17 @@ class Pipeline:
         claimed_features: dict[str, str],
         sheet: BuildSheet | None = None,
         manual_text: str = "",
+        catalog_text: str = "",
     ) -> Vehicle:
-        """Merge verified sticker/build-sheet + VIN data with claimed data."""
+        """Merge verified sticker/build-sheet + VIN data with claimed data.
+
+        ``catalog_text`` (partsdeal decode) is CLAIMED evidence — the catalog
+        collapses trims (proven on real 2023 Supras), so it can never verify.
+        """
         miles = row["miles"] if row else None
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
-        claimed_text = " ".join(t for t in (_claimed_text(row), manual_text) if t)
+        claimed_text = " ".join(t for t in (_claimed_text(row), manual_text, catalog_text) if t)
         facts = vin_decode.decode(vin)
 
         if parsed is None and sheet is not None:
@@ -736,12 +743,7 @@ class Pipeline:
             kw["claimed_features"] = claimed_features
             # The FE suspension code is as definitive as a VIN char — it joins
             # the facts so Z51/MagneRide resolve on build-sheet-only cars.
-            # Likewise Toyota's factory ATM/MTM transmission field.
-            kw["vin_facts"] = (
-                facts
-                | c8_suspension_facts(model_key, kw["verified_rpo"])
-                | partsdeal_sheet_facts(vin_decode.wmi_make(vin) or "", sheet)
-            )
+            kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
             self._fallback_listing_color(kw, model_key, row)
             return Vehicle(**kw)
 
