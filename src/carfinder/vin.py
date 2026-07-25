@@ -28,8 +28,38 @@ CT4 (1G6D…):
   sheets — DL5 deliberately decodes to nothing and the sticker/build sheet
   decides.
 
+BMW M2, G87 (3MF…, San Luis Potosí — WMI created for the G87 in 2022; the
+F87 was WBS, and 3MW is non-M Mexico BMWs):
+  pos 4-8: 13DM0 = 2023-2024, 23DM0 = 2025+ (LCI) — the ONLY registered M2
+  patterns per NHTSA vPIC's manufacturer pattern table (2026-07-24; every
+  pos-7/8 alternative rejected). Real-VIN verified: 3MF13DM09P8D14983 (2023),
+  3MF23DM09S8F25064 (2025 6MT). Transmission is NOT VIN-encoded (6MT and
+  auto share identical patterns), so no trans fact is ever emitted.
+
+BMW M2, F87 (WBS…, BMW M GmbH, Germany, 2016-2021):
+  pos 4-8: 1H9C3/1H9C5 (2016-17), 1J5C3/1J5C5 (2018), 2U7C3/2U7C5/2U7C0
+  (2019-21). Pos-8 3-vs-5 is NOT transmission (real 2017 6MT …888099 and DCT
+  …888794 both carry pos8=3). Decodes to gen=F87 so a G87-only profile
+  verified-fails these instead of trusting listing year data.
+
+Toyota GR Supra, A90/A91 (WZ1…, Magna Steyr Graz; WMI registered to BMW AG,
+make TOYOTA per vPIC):
+  pos 4-5: DB (all Supras)
+  pos 6 (engine): 4 = B58 3.0 (2020 only), 0 = B58 3.0 (2021+),
+                  2 = B48 2.0 — real-VIN verified across 2020-2024.
+  pos 7 (era):    C = 2020-2022 — ALL automatic (6MT didn't exist until
+                  2023; vPIC returns "Automatic 8" for every C-era pattern),
+                  so C-era VINs emit trans=AUTO.
+                  G = 2023+ — trans deliberately NOT decoded (manual and
+                  auto share DB0G0; a 2023 A91-MT manual and a 2023 Premium
+                  auto were confirmed pattern-identical).
+  "3.0 Premium" is NOT VIN-encoded — trim evidence must come from build
+  data / listing text, never from here.
+
 Pos 10 model-year codes follow the standard alphabet; the subset below is
-title-verified in the corpus (N/P/R/S/T) plus M from a user-supplied 2021 car.
+title-verified in the corpus (N/P/R/S/T) plus M from a user-supplied 2021 car;
+G/H/J/K cover the F87 years and L/M the early Supras (standard alphabet,
+cross-checked against vPIC decodes of real F87/A90 VINs, 2026-07-24).
 
 Facts are definitive physical identity — verified provenance. Absence of a
 fact means "this VIN pattern is outside verified ground truth", never a guess.
@@ -41,7 +71,39 @@ import re
 
 _C8_TRIM = {"A": "1LT", "B": "2LT", "C": "3LT"}
 _C8_BODY = {"2": "COUPE", "3": "CONVERTIBLE"}
-_YEAR = {"L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027}
+_YEAR = {
+    "G": 2016, "H": 2017, "J": 2018, "K": 2019, "L": 2020, "M": 2021,
+    "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027,
+}  # fmt: skip
+
+# G87 M2: the only VDS patterns BMW registered (see module docstring).
+_M2_G87_VDS = frozenset({"13DM0", "23DM0"})
+# F87 M2 patterns, 2016-2021.
+_M2_F87_VDS = frozenset({"1H9C3", "1H9C5", "1J5C3", "1J5C5", "2U7C3", "2U7C5", "2U7C0"})
+# Supra pos 6-8: engine char + era char + '0'.
+_SUPRA_VDS = frozenset({"4C0", "0C0", "2C0", "0G0", "2G0"})
+
+
+def wmi_make(vin: str | None) -> str | None:
+    """Evidence-routing make for a VIN: 'gm' | 'bmw' | 'toyota' | None.
+
+    Decides which make-specific verified-evidence fetchers may be called
+    (GM window sticker / gmpartsgiant vs the partsdeal siblings). None means
+    "no make-specific source known" — never guess. WZ1 is registered to BMW
+    AG (Graz builds the car) but the vehicle is a Toyota and its parts
+    catalog lives on toyotapartsdeal — routed by brand, not builder.
+    """
+    if not vin:
+        return None
+    v = vin.strip().upper()
+    if v.startswith("1G"):
+        return "gm"
+    if v.startswith(("3MF", "WBS", "3MW", "WBA", "WBY", "4US", "5UX", "5YM")):
+        return "bmw"
+    if v.startswith("WZ1"):
+        return "toyota"
+    return None
+
 
 # --- ISO 3779 validation (17 chars, no I/O/Q, position-9 check digit) -------
 
@@ -106,6 +168,23 @@ def decode(vin: str | None) -> dict[str, str]:
                 facts["trans"] = "AUTO"
         elif v[7] in ("L", "K"):  # 2.7T / 2.0T — neither ever a Blackwing
             facts["model"] = "NON_BLACKWING"
+    elif v.startswith("3MF"):  # BMW G87 M2 — the WMI exists only for it
+        if v[3:8] in _M2_G87_VDS:
+            facts["model"] = "M2"
+            facts["gen"] = "G87"
+        # Transmission is not VIN-encoded on the G87 — no trans fact, ever.
+    elif v.startswith("WBS"):  # BMW M GmbH (Germany)
+        if v[3:8] in _M2_F87_VDS:
+            facts["model"] = "M2"
+            facts["gen"] = "F87"
+    elif v.startswith("WZ1DB"):  # Toyota GR Supra (Graz)
+        vds = v[5:8]
+        if vds in _SUPRA_VDS:
+            facts["model"] = "SUPRA"
+            facts["engine"] = "2.0" if v[5] == "2" else "3.0"
+            if v[6] == "C":  # 2020-2022: manual didn't exist yet
+                facts["trans"] = "AUTO"
+            # G-era (2023+): manual and auto share the pattern — no fact.
     return facts
 
 

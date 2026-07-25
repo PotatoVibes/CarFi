@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from carfinder.models import Matcher, Provenance, Vehicle
 from carfinder.scorer import match
-from carfinder.vin import decode, model_year
+from carfinder.vin import decode, model_year, wmi_make
 
 # --- decoder goldens (each class represented in the committed sticker corpus) ---
 
@@ -50,11 +50,56 @@ def test_ct4_blackwing_vs_non_blackwing():
     assert decode("1G6DB5RK0N0110165") == {"model": "NON_BLACKWING"}
 
 
+def test_g87_m2_decoding():
+    # Real VINs, 2026-07-24 research (classic.com / Cars & Bids / duPont).
+    assert decode("3MF13DM09P8D14983") == {"model": "M2", "gen": "G87"}  # 2023
+    assert decode("3MF23DM09S8F25064") == {"model": "M2", "gen": "G87"}  # 2025 6MT
+    assert decode("3MF23DM07S8F59522") == {"model": "M2", "gen": "G87"}  # 2025
+    # Transmission is NOT VIN-encoded on the G87 — never a trans fact.
+    assert "trans" not in decode("3MF23DM09S8F25064")
+    # A 3MF VIN outside the registered patterns decodes to nothing.
+    assert decode("3MF53CM09P8D14983") == {}
+
+
+def test_f87_m2_decoding():
+    # Real VINs (classic.com): gen fact lets a G87-only profile verified-fail.
+    assert decode("WBS1H9C56GV785915") == {"model": "M2", "gen": "F87"}  # 2016
+    assert decode("WBS1H9C32HV888099") == {"model": "M2", "gen": "F87"}  # 2017 6MT
+    assert decode("WBS2U7C08L7E80678") == {"model": "M2", "gen": "F87"}  # 2020 Comp
+    # Other WBS M cars decode to nothing (outside verified ground truth).
+    assert decode("WBS8M9C56J5J78168") == {}
+
+
+def test_supra_decoding():
+    # 2020-2022 (era char C): all automatic — verified trans fact.
+    assert decode("WZ1DB4C01LW022039") == {"model": "SUPRA", "engine": "3.0", "trans": "AUTO"}
+    assert decode("WZ1DB0C02MW035702") == {"model": "SUPRA", "engine": "3.0", "trans": "AUTO"}
+    assert decode("WZ1DB2C01MW042488") == {"model": "SUPRA", "engine": "2.0", "trans": "AUTO"}
+    # 2023+ (era char G): manual exists — deliberately NO trans fact. A 2023
+    # A91-MT manual and a 2023 3.0 Premium automatic share this pattern.
+    assert decode("WZ1DB0G06PW056034") == {"model": "SUPRA", "engine": "3.0"}
+    assert decode("WZ1DB0G07PW059282") == {"model": "SUPRA", "engine": "3.0"}
+    assert decode("WZ1DB2G00PW048011") == {"model": "SUPRA", "engine": "2.0"}
+    # Unknown era char -> engine-only facts never invented.
+    assert decode("WZ1DB0X06PW056034") == {}
+
+
+def test_wmi_make_routing():
+    assert wmi_make("1G1YC3D47P5121316") == "gm"
+    assert wmi_make("1G6D65RP8N0460286") == "gm"
+    assert wmi_make("3MF13DM09P8D14983") == "bmw"
+    assert wmi_make("WBS1H9C56GV785915") == "bmw"
+    assert wmi_make("WZ1DB0G06PW056034") == "toyota"
+    assert wmi_make("JTDKARFU0L3123456") is None  # Prius — no source known
+    assert wmi_make(None) is None
+    assert wmi_make("") is None
+
+
 def test_malformed_vins_decode_empty():
     assert decode(None) == {}
     assert decode("") == {}
     assert decode("1G1Y") == {}  # short
-    assert decode("WBA123456789ABCDE") == {}  # not a GM pattern we know
+    assert decode("WBA123456789ABCDE") == {}  # not a pattern we know
 
 
 def test_model_year_codes():
@@ -62,6 +107,10 @@ def test_model_year_codes():
     assert model_year("1G1YA2D4XP5108883") == 2023
     assert model_year("1G1YA2D42T5111674") == 2026
     assert model_year("1G1YA2D42Z5111674") is None  # outside verified range
+    # Import years (F87 / A90 / G87) follow the same standard alphabet.
+    assert model_year("WBS1H9C56GV785915") == 2016
+    assert model_year("WZ1DB4C01LW022039") == 2020
+    assert model_year("3MF23DM09S8F25064") == 2025
 
 
 # --- scorer integration ------------------------------------------------------
