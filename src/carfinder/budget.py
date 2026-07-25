@@ -30,6 +30,8 @@ ANTHROPIC = "anthropic"
 GM_STICKER = "gm_sticker"
 BUILDSHEET = "gm_buildsheet"
 MARKETCHECK = "marketcheck"
+BMW_PARTSDEAL = "bmw_partsdeal"
+TOYOTA_PARTSDEAL = "toyota_partsdeal"
 
 # Metering kinds.
 COUNT = "count"
@@ -102,6 +104,14 @@ class BudgetGuard:
             # cap like Auto.dev's — no live call may bypass this gate.
             MARKETCHECK: ProviderBudget(
                 MARKETCHECK, COUNT, float(settings.monthly_call_cap_marketcheck)
+            ),
+            # partsdeal siblings (BMW/Toyota VIN decoders): free + unofficial,
+            # so the caps are politeness backstops like gmpartsgiant's.
+            BMW_PARTSDEAL: ProviderBudget(
+                BMW_PARTSDEAL, COUNT, float(settings.monthly_call_cap_partsdeal)
+            ),
+            TOYOTA_PARTSDEAL: ProviderBudget(
+                TOYOTA_PARTSDEAL, COUNT, float(settings.monthly_call_cap_partsdeal)
             ),
         }
         return cls(conn, providers)

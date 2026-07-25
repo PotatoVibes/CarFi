@@ -48,6 +48,10 @@ class Settings:
     notify_threshold: float
     # Distances on the UI are measured from here (zip centroid).
     home_zip: str = "77498"
+    # partsdeal (BMW/Toyota VIN decoders): free/unofficial — politeness
+    # backstop per make, mirroring the gmpartsgiant cap. Defaulted so
+    # explicit Settings(...) construction in tests stays stable.
+    monthly_call_cap_partsdeal: int = 500
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -68,6 +72,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         # Free tier = 500 calls/mo; cap at 400 to leave a buffer (mirrors the
         # Auto.dev 1,000 -> 800 pattern). Enforced by BudgetGuard.
         monthly_call_cap_marketcheck=int(os.environ.get("MONTHLY_CALL_CAP_MARKETCHECK") or "400"),
+        # partsdeal (BMW/Toyota VIN decoders): free/unofficial — politeness
+        # backstop per make, mirroring the gmpartsgiant cap.
+        monthly_call_cap_partsdeal=int(os.environ.get("MONTHLY_CALL_CAP_PARTSDEAL") or "500"),
         stickers_dir=Path(os.environ.get("CARFINDER_STICKERS_DIR") or "stickers"),
         config_dir=Path(os.environ.get("CARFINDER_CONFIG_DIR") or "config"),
         notify_webhook_url=os.environ.get("NOTIFY_WEBHOOK_URL") or None,
