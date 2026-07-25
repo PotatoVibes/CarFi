@@ -70,6 +70,15 @@ def test_f87_m2_decoding():
     assert decode("WBS8M9C56J5J78168") == {}
 
 
+def test_non_m_bmw_wmis_are_verified_non_m2():
+    # Real VINs from the 2026-07-24 Marketcheck "2 Series" probe: M240i (3MW)
+    # and 230i (WBA). No M2 ever shipped under these WMIs — definitive, so
+    # the fast path excludes the coarse-bucket pollution with zero fetches.
+    assert decode("3MW53CM09R8E11535") == {"model": "NON_M2"}  # M240i
+    assert decode("WBA53AK01R7R41748") == {"model": "NON_M2"}  # 230i
+    assert decode("WBY73AK05R7R37369") == {"model": "NON_M2"}  # i-series WMI
+
+
 def test_supra_decoding():
     # 2020-2022 (era char C): all automatic — verified trans fact.
     assert decode("WZ1DB4C01LW022039") == {"model": "SUPRA", "engine": "3.0", "trans": "AUTO"}
@@ -99,7 +108,7 @@ def test_malformed_vins_decode_empty():
     assert decode(None) == {}
     assert decode("") == {}
     assert decode("1G1Y") == {}  # short
-    assert decode("WBA123456789ABCDE") == {}  # not a pattern we know
+    assert decode("JTDKARFU0L3123456") == {}  # not a pattern we know (Prius)
 
 
 def test_model_year_codes():

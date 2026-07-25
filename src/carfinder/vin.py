@@ -177,6 +177,15 @@ def decode(vin: str | None) -> dict[str, str]:
         if v[3:8] in _M2_F87_VDS:
             facts["model"] = "M2"
             facts["gen"] = "F87"
+        # Other WBS M cars (M3/M4/...) decode to nothing: the F87 pattern
+        # list may not be exhaustive, so absence stays non-evidence.
+    elif v.startswith(("3MW", "WBA", "WBY")):
+        # Non-M-division BMW WMIs: no M2 of either generation ever shipped
+        # under these (G87 = 3MF exclusively, F87 = WBS; vPIC rejects M2
+        # VDS patterns under 3MW/WBA, verified 2026-07-24). Definitive, so
+        # Marketcheck's coarse "2 Series" bucket (230i/M240i) fast-path
+        # excludes with zero evidence fetches — the NON_BLACKWING move.
+        facts["model"] = "NON_M2"
     elif v.startswith("WZ1DB"):  # Toyota GR Supra (Graz)
         vds = v[5:8]
         if vds in _SUPRA_VDS:

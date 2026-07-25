@@ -24,7 +24,8 @@ query:
   year_max: null
   price_max: null
   price_margin: 0.08
-  marketcheck_model: GR Supra # Marketcheck takes no comma-lists — verify on first probe
+  marketcheck_model: Supra # MC taxonomy verified live 2026-07-24: "GR Supra" = 0 hits, "Supra" works
+
 hard:
 - key: model_supra
   label: GR Supra

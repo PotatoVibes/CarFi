@@ -20,7 +20,7 @@ query:
   year_max: null
   price_max: null
   price_margin: 0.08
-  marketcheck_model: null # likely "M2" — verify on the first Marketcheck probe
+  marketcheck_model: 2 Series # MC probe 2026-07-24: "M2" = 0 hits; M2s live under "2 Series"
 hard:
 - key: model_m2
   label: BMW M2
