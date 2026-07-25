@@ -55,6 +55,7 @@ def run_sync(
     config_dir: str | Path = "config",
     progress: Callable[[str], None] | None = None,
     only_model: str | None = None,
+    max_pages: int | None = None,
 ) -> dict[str, PipelineStats]:
     """Build a live pipeline and run every profile (or just `only_model`).
     Returns {model_key: stats}."""
@@ -62,7 +63,7 @@ def run_sync(
     results: dict[str, PipelineStats] = {}
     for profile in _selected(config_dir, only_model):
         results[profile.model_key] = pipeline.run(
-            profile, mode=mode, progress=_prefixed(progress, profile.name)
+            profile, mode=mode, progress=_prefixed(progress, profile.name), max_pages=max_pages
         )
     return results
 

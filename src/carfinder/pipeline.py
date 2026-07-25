@@ -32,13 +32,15 @@ from .buildsheet import vehicle_kwargs as sheet_vehicle_kwargs
 from .config import Settings
 from .models import Profile, Provenance, Vehicle
 from .notify import Notifier
+from .partsdeal import PartsDealFetcher
+from .partsdeal import sheet_facts as partsdeal_sheet_facts
 from .query import build_listing_params, build_marketcheck_params
 from .reconcile import Facts, reconcile
 from .scorer import score_vehicle
 from .sources import AutoDevSource, ListingSource, MarketcheckSource, scrub_api_key
 from .sticker_parser import PARSER_VERSION, ParsedSticker, parse_sticker, vehicle_kwargs
 from .stickers import FOUND, StickerFetcher
-from .sync import SyncEngine, SyncStats
+from .sync import MAX_PAGES_DEFAULT, SyncEngine, SyncStats
 
 log = logging.getLogger("carfinder.pipeline")
 
@@ -91,11 +93,14 @@ class Pipeline:
         buildsheet_fetcher: BuildSheetFetcher | None = None,
         max_buildsheets_per_run: int = 100,
         secondary_source: ListingSource | None = None,
+        partsdeal_fetchers: dict[str, PartsDealFetcher] | None = None,
     ):
         self._conn = conn
         self._fetcher = fetcher
         self._buildsheet = buildsheet_fetcher
         self._max_buildsheets = max_buildsheets_per_run
+        # make -> PartsDealFetcher for non-GM verified identity decodes.
+        self._partsdeal = partsdeal_fetchers or {}
         # rescore() needs no source; run() does (guarded).
         self._source = source
         self._engine = SyncEngine(conn, source, now=now) if source is not None else None
@@ -148,9 +153,13 @@ class Pipeline:
         mode: str = "incremental",
         run_id: str | None = None,
         progress: Callable[[str], None] | None = None,
+        max_pages: int | None = None,
     ) -> PipelineStats:
         if self._engine is None:
             raise ValueError("run() needs a listing source; none was configured")
+        # An explicit cap is a budget-tight TEST pull: results get flagged
+        # truncated by the engine, which also suppresses delist evidence.
+        pages = max_pages if max_pages is not None else MAX_PAGES_DEFAULT
         params = build_listing_params(profile, self._current_year)
         mc_stats: SyncStats | None = None
         mc_failed = False
@@ -176,9 +185,16 @@ class Pipeline:
             # window — a single newest-first walk is correct and cheapest.
             # Marketcheck gets the same treatment: dos_active-asc is a stable
             # newest-first order, so the known-page stop is sound there too.
-            mc_stats, mc_failed = self._sync_marketcheck_incremental(profile, run_id, progress)
+            mc_stats, mc_failed = self._sync_marketcheck_incremental(
+                profile, run_id, progress, max_pages=pages
+            )
             sync_stats = self._engine.sync(
-                params, profile.model_key, mode=mode, run_id=run_id, progress=progress
+                params,
+                profile.model_key,
+                mode=mode,
+                run_id=run_id,
+                progress=progress,
+                max_pages=pages,
             )
         stats = PipelineStats(sync=sync_stats, mc_sync=mc_stats, mc_failed=mc_failed)
         attributes = _profile_attributes(profile) if self._extractor is not None else []
@@ -446,7 +462,7 @@ class Pipeline:
         return merged, failed
 
     def _sync_marketcheck_incremental(
-        self, profile, run_id, progress
+        self, profile, run_id, progress, max_pages: int = MAX_PAGES_DEFAULT
     ) -> tuple[SyncStats | None, bool]:
         """Cheap Marketcheck incremental: ONE newest-first walk per model
         (dos_active asc — stable order) with the known-page early stop, so a
@@ -469,6 +485,7 @@ class Pipeline:
                 run_id=f"{run_id or uuid4().hex}-mc",
                 progress=(lambda msg: progress(f"marketcheck: {msg}")) if progress else None,
                 delist=False,
+                max_pages=max_pages,
             )
         except (BudgetExceeded, httpx.HTTPError) as exc:
             log.warning("marketcheck incremental failed: %s", scrub_api_key(str(exc)))
@@ -496,13 +513,29 @@ class Pipeline:
                 self._finish_vin(vin, profile, pre_result, None, row, stats)
                 return
 
-        parsed, sticker_path = self._maybe_sticker(vin, run_id, stats)
-        # No sticker -> try the build-sheet decoder (covers pre-2022 cars and
-        # sticker not_founds). Verified evidence, so AI is skipped when found.
-        sheet = self._maybe_buildsheet(vin, run_id, stats) if parsed is None else None
+        # Evidence routing is make-aware: GM VINs get the window sticker ->
+        # gmpartsgiant chain; BMW/Toyota VINs get their partsdeal decoder.
+        # Calling a GM endpoint with a foreign VIN would waste GM budget AND
+        # poison the cache with a false definitive not_found.
+        make = vin_decode.wmi_make(vin)
+        parsed, sticker_path = (
+            self._maybe_sticker(vin, run_id, stats) if make == "gm" else (None, None)
+        )
+        sheet = None
+        if parsed is None:
+            if make == "gm":
+                # Build-sheet decoder covers pre-2022 cars and sticker
+                # not_founds. Full options list -> AI is skipped when found.
+                sheet = self._maybe_buildsheet(vin, run_id, stats)
+            elif make in self._partsdeal:
+                sheet = self._maybe_partsdeal(vin, make, run_id, stats)
+        # GM build sheets carry the full factory option list, so AI adds
+        # nothing. partsdeal decodes are identity-only (no options) — dealer
+        # text is still the only signal for option-level features there.
+        skip_ai = sheet is not None and make == "gm"
         claimed_features = (
             {}
-            if sheet is not None
+            if skip_ai
             else self._ai_features(
                 vin, parsed, sticker_path, row, attributes, run_id, stats, manual_text=manual_text
             )
@@ -587,6 +620,23 @@ class Pipeline:
             return None
         try:
             result = self._buildsheet.fetch(vin, run_id=run_id)
+        except BudgetExceeded:
+            return None
+        if not result.from_cache:
+            stats.buildsheets_fetched += 1
+        return result.sheet if result.status == SHEET_FOUND else None
+
+    def _maybe_partsdeal(
+        self, vin: str, make: str, run_id: str, stats: PipelineStats
+    ) -> BuildSheet | None:
+        """Non-GM identity decode (partsdeal siblings), sharing the per-run
+        build-sheet network cap — same fetch class, same cache table."""
+        fetcher = self._partsdeal[make]
+        would_network = not fetcher.is_cached(vin)
+        if would_network and stats.buildsheets_fetched >= self._max_buildsheets:
+            return None
+        try:
+            result = fetcher.fetch(vin, run_id=run_id)
         except BudgetExceeded:
             return None
         if not result.from_cache:
@@ -686,7 +736,12 @@ class Pipeline:
             kw["claimed_features"] = claimed_features
             # The FE suspension code is as definitive as a VIN char — it joins
             # the facts so Z51/MagneRide resolve on build-sheet-only cars.
-            kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
+            # Likewise Toyota's factory ATM/MTM transmission field.
+            kw["vin_facts"] = (
+                facts
+                | c8_suspension_facts(model_key, kw["verified_rpo"])
+                | partsdeal_sheet_facts(vin_decode.wmi_make(vin) or "", sheet)
+            )
             self._fallback_listing_color(kw, model_key, row)
             return Vehicle(**kw)
 
@@ -836,6 +891,7 @@ def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pi
     )
     fetcher = StickerFetcher(conn, guard, stickers_dir=settings.stickers_dir)
     buildsheet_fetcher = BuildSheetFetcher(conn, guard)
+    partsdeal_fetchers = {make: PartsDealFetcher(conn, guard, make) for make in ("bmw", "toyota")}
     extractor = (
         HaikuExtractor(conn, guard, settings.anthropic_api_key)
         if settings.anthropic_api_key
@@ -852,6 +908,7 @@ def _build(conn, settings: Settings, current_year: int, with_source: bool) -> Pi
         notify_threshold=settings.notify_threshold,
         buildsheet_fetcher=buildsheet_fetcher,
         secondary_source=secondary,
+        partsdeal_fetchers=partsdeal_fetchers,
     )
 
 

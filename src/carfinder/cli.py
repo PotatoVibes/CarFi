@@ -48,6 +48,12 @@ def fetch_stickers(vins: list[str]) -> None:
 def sync(
     full: bool = False,
     model: str = typer.Option(None, help="Only this model_key (e.g. ct4v_blackwing)"),
+    max_pages: int = typer.Option(
+        None,
+        help="Cap listing pages per walk (20 rows/page on Auto.dev) — for "
+        "budget-tight test pulls of a new profile. Results are flagged "
+        "truncated; delist detection is skipped automatically.",
+    ),
 ) -> None:
     """Run a sync over every configured profile — or just one with --model."""
     from datetime import UTC, datetime
@@ -64,6 +70,7 @@ def sync(
             mode="full" if full else "incremental",
             config_dir=settings.config_dir,
             only_model=model,
+            max_pages=max_pages,
         )
     except ValueError as exc:
         typer.echo(f"error: {exc}", err=True)
