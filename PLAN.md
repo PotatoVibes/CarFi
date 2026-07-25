@@ -182,16 +182,70 @@ Sold-car outcome tracking (what did matching cars actually sell for), CSV export
 
 ---
 
+## Milestone 8 — Non-GM makes: BMW M2 (G87) + Toyota GR Supra 3.0 Premium
+
+Added 2026-07-24. Extends the tool to its first non-GM models while keeping
+the verified/claimed provenance discipline intact. Scope decisions (owner):
+manual transmission HARD on both; M2 = G87 only (2023+, no F87, no CS —
+the CS needs no forbid: automatic-only and priced beyond the hard bound);
+Supra = 3.0 Premium, which with the manual requirement implies 2023+.
+
+**Research findings (real-VIN + NHTSA vPIC verified, 2026-07-24):**
+- G87 M2 WMI is `3MF` (created for the G87; F87 was WBS). VDS `13DM0`
+  (2023–24) / `23DM0` (2025+) are the only registered M2 patterns.
+  Transmission is NOT VIN-encoded.
+- Supra WMI `WZ1` (Graz, registered to BMW AG). Pos 6 = engine (3.0 vs 2.0,
+  verified); pos 7 era char: `C` = 2020–22 (all automatic — verified) vs
+  `G` = 2023+ (manual/auto share the pattern). "Premium" is not VIN-encoded.
+- Check digit validation holds for both imports (49 CFR 565).
+
+**Evidence-source matrix (the M8 core):**
+
+| Layer | GM | BMW / Toyota |
+|---|---|---|
+| VIN facts (vin.py) | verified | verified (patterns above) |
+| Window sticker | verified, per-VIN | none available (free) |
+| Parts-catalog decode | gmpartsgiant = true per-VIN build sheet, verified | partsdeal siblings = CATALOG lookup, **claimed-only** |
+| Dealer text / AI | claimed | claimed |
+
+The partsdeal demotion is fixture-proven (tests/fixtures/partsdeal): the
+2023 A91-MT manual and 2023 Premium automatic return identical,
+self-contradictory catalog attributes (ATM + "6-Speed Manual Floor Shift";
+Trim "BASE" on a Premium). Nothing from that source may verify or fail a
+hard requirement; its self-contradictory transmission attributes are
+dropped even from claimed text.
+
+**Consequence:** M2 manual and Supra manual/Premium (2023+) are not
+machine-verifiable today — candidates land in needs_review, ranked by
+score, for human confirmation (window-sticker photo, dealer call). The
+VIN fast path still verified-excludes every 2020–22 Supra (auto) and
+every F87 for free. Watch items: whether the M2 CS gets its own VDS
+pattern, and whether Toyota's katashiki (logged per VIN) ever splits
+2023+ trims.
+
+**Budget:** market research puts both models at ~300–700 VINs national —
+full passes ≈ 10–30 calls/model/source, incrementals ~1–3. July's Auto.dev
+budget was nearly exhausted at build time (791/800), so the first pull is
+a `sync --max-pages 1` test (20 rows = 1 call per model) plus
+`marketcheck-test` dry-runs to pin the model-name taxonomy ("Supra" vs
+"GR Supra"; M2 trim strings are useless — "Base").
+
+Commits: `feat(vin)`, `feat(sources)`, `feat(pipeline)`, `feat(profiles)`,
+`fix(partsdeal)` (the provenance demotion). Tag: `m8`.
+
+---
+
 ## Call budget projection
 
 | Activity | Calls/month |
 |---|---|
 | Fixture capture (one-time, M3) | ~15 |
-| Incremental sync 3×/wk, 2 models | ~60–100 |
-| Weekly full pass, 2 models | ~80–120 |
+| Incremental sync 3×/wk, 2 GM models | ~60–100 |
+| Weekly full pass, 2 GM models | ~80–120 |
+| Incremental + weekly full, M2 + Supra (M8; small markets) | ~60–150 |
 | Sticker fetches | 0 (GM direct) |
 | Live smoke tests | ~5 |
-| **Total vs 1,000 free** | **~160–240** |
+| **Total vs 1,000 free (cap 800)** | **~220–390** |
 
 ---
 
