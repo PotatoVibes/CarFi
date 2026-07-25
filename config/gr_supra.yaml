@@ -1,0 +1,148 @@
+# Seeded 2026-07-24 (Milestone 8). Managed by the Car Finder config UI once
+# edited there (edits regenerate this file; previous version kept as .bak).
+#
+# Scope per Bill: GR Supra 3.0 Premium, 6-speed manual. The 6MT exists only
+# 2023+ — and every 2020-2022 VIN pattern is corpus-verified automatic — so
+# the 2023+ year gate narrows the query without trusting any listing field.
+#
+# Verification reality (2026-07-24 research): 3.0 vs 2.0 is VIN-verified
+# (pos 6). Transmission is verified via toyotapartsdeal's factory ATM/MTM
+# field. "Premium" is NOT VIN-encoded and the parts catalog labels a real
+# Premium car "BASE", so the Premium gate rides Premium-exclusive equipment
+# markers (JBL / head-up display) and listing text into needs_review until
+# the katashiki model code is corpus-mapped to trims.
+name: GR Supra 3.0 Premium
+model_key: gr_supra
+query:
+  make: Toyota
+  model: Supra,GR Supra # feeds are split between the two names; comma-list covers both
+  trim: null # trim strings vary ("3.0 Premium", "A91", ...) — scorer decides
+  year_min: null # derived from the year_2023_plus hard constraint
+  year_max: null
+  price_max: null
+  price_margin: 0.08
+  marketcheck_model: GR Supra # Marketcheck takes no comma-lists — verify on first probe
+hard:
+- key: model_supra
+  label: GR Supra
+  kind: require
+  matcher:
+    vin_attr: model
+    vin_any:
+    - SUPRA
+    rpo: []
+    sticker_text: SUPRA
+  min_year: null
+- key: engine_30
+  label: 3.0 (B58) — not 2.0
+  kind: require
+  matcher:
+    vin_attr: engine
+    vin_any:
+    - '3.0'
+    rpo: []
+    sticker_text: 3\.0|B58
+  min_year: null
+- key: year_2023_plus
+  label: 2023 or newer (first 6MT year)
+  kind: year_min
+  matcher: null
+  min_year: 2023
+- key: manual_transmission
+  label: 6-speed manual
+  kind: require
+  matcher:
+    vin_attr: trans
+    vin_any:
+    - MANUAL
+    rpo: []
+    sticker_text: \bMTM\b|6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION|\b6MT\b
+  min_year: null
+- key: trim_premium
+  label: 3.0 Premium equipment
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: PREMIUM|\bJBL\b|HEAD.?UP DISPLAY
+  min_year: null
+soft:
+- key: miles
+  label: Mileage
+  kind: numeric
+  weight: 0.2
+  attr: miles
+  ideal: 50000.0
+  hard: 60000.0
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: price
+  label: Price
+  kind: numeric
+  weight: 0.25
+  attr: price
+  ideal: 48000.0
+  hard: 60000.0
+  direction: lower_better
+  exclude_beyond_hard: true
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: color
+  label: Color
+  kind: color
+  weight: 0.1
+  attr: null
+  ideal: null
+  hard: null
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred:
+  - blue
+  - yellow
+  - green
+  penalized:
+  - white
+  - black
+  neutral_score: 50.0
+highlights:
+- label: A91-MT Edition
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: A91[- ]?MT
+- label: MkV Final Edition
+  bonus: 4.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: MKV FINAL|FINAL EDITION
+- label: 45th Anniversary Edition
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: 45TH ANNIVERSARY
+- label: Driver Assist Package
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: DRIVER ASSIST
+- label: Red brake calipers
+  bonus: 1.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: RED.{0,15}CALIPER|CALIPERS?,?\s*RED
+review_on_unknown_hard: true

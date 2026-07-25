@@ -564,7 +564,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _start_sync("full", "full pass", model)
 
     # World-manufacturer prefix -> which profile a hand-entered VIN belongs to.
-    _VIN_PREFIX_MODEL = {"1G1Y": "c8_stingray", "1G6D": "ct4v_blackwing"}
+    # 3MF1/3MF2 = G87 M2 (the WMI exists only for the G87); WZ1D = GR Supra.
+    _VIN_PREFIX_MODEL = {
+        "1G1Y": "c8_stingray",
+        "1G6D": "ct4v_blackwing",
+        "3MF1": "bmw_m2",
+        "3MF2": "bmw_m2",
+        "WZ1D": "gr_supra",
+    }
 
     @app.post("/vins")
     async def add_vin(request: Request):

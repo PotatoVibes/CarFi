@@ -84,9 +84,35 @@ _CT4V_PAINT: dict[str, ColorFamily] = {
     "GCP": ColorFamily.yellow,  # Cyber Yellow Metallic (user-supplied)
 }
 
+# BMW G87 M2 paint codes. Listings and the partsdeal decode never carry BMW
+# paint codes today, so this table is dormant until a code-bearing source
+# exists — the text classifier below does the real work. Codes seeded from
+# BMW configurator references and marked # VERIFY like the GM tables were.
+_M2_PAINT: dict[str, ColorFamily] = {
+    "300": ColorFamily.white,  # Alpine White             # VERIFY
+    "475": ColorFamily.black,  # Black Sapphire Metallic  # VERIFY
+    "C4P": ColorFamily.gray,  # Brooklyn Grey Metallic    # VERIFY
+    "C57": ColorFamily.blue,  # Zandvoort Blue            # VERIFY
+    "C3G": ColorFamily.red,  # Toronto Red Metallic       # VERIFY
+}
+
+# Toyota GR Supra paint codes (same dormant-table caveat as the M2's).
+_SUPRA_PAINT: dict[str, ColorFamily] = {
+    "083": ColorFamily.white,  # Absolute Zero White      # VERIFY
+    "218": ColorFamily.black,  # Nocturnal Black          # VERIFY
+    "3U5": ColorFamily.red,  # Renaissance Red 2.0        # VERIFY
+    "5C1": ColorFamily.yellow,  # Nitro Yellow            # VERIFY
+    "8Y7": ColorFamily.blue,  # Refraction Blue           # VERIFY
+    "1L5": ColorFamily.gray,  # Turbulence Gray           # VERIFY
+    "1K9": ColorFamily.gray,  # Phantom (Matte Gray)      # VERIFY
+    "1D6": ColorFamily.silver,  # Tungsten                # VERIFY
+}
+
 _PAINT_TABLES: dict[str, dict[str, ColorFamily]] = {
     "c8_stingray": _C8_PAINT,
     "ct4v_blackwing": _CT4V_PAINT,
+    "bmw_m2": _M2_PAINT,
+    "gr_supra": _SUPRA_PAINT,
 }
 
 # Keyword -> family for the claimed text fallback. Order matters: earlier,
@@ -105,6 +131,29 @@ _TEXT_KEYWORDS: list[tuple[str, ColorFamily]] = [
     ("WAVE METALLIC", ColorFamily.blue),
     ("HYSTERIA", ColorFamily.other),
     ("PURPLE", ColorFamily.other),
+    # BMW G87 marketing names that carry no family word.
+    ("ZANDVOORT", ColorFamily.blue),
+    ("PORTIMAO", ColorFamily.blue),
+    ("TORONTO", ColorFamily.red),
+    ("BROOKLYN", ColorFamily.gray),
+    ("SAO PAULO", ColorFamily.yellow),
+    ("JAVA", ColorFamily.green),
+    ("ISLE OF MAN", ColorFamily.green),
+    ("SKYSCRAPER", ColorFamily.gray),
+    ("FROZEN PURE", ColorFamily.gray),  # Frozen Pure Grey (Individual)
+    # Toyota GR Supra marketing names.
+    ("ABSOLUTE ZERO", ColorFamily.white),
+    ("RENAISSANCE", ColorFamily.red),
+    ("NITRO", ColorFamily.yellow),
+    ("REFRACTION", ColorFamily.blue),
+    ("STRATOSPHERE", ColorFamily.blue),
+    ("DOWNSHIFT", ColorFamily.blue),
+    ("PHANTOM", ColorFamily.gray),
+    ("TURBULENCE", ColorFamily.gray),
+    ("TUNGSTEN", ColorFamily.silver),
+    ("NOCTURNAL", ColorFamily.black),
+    ("CU LATER", ColorFamily.gray),
+    ("MIKAN BLAST", ColorFamily.orange),  # 45th Anniversary orange
     # Dealer-feed shorthands seen in Marketcheck data (2026-07-22 audit).
     ("BURGUNDY", ColorFamily.red),
     ("MIST", ColorFamily.red),  # bare "Mist" = Red Mist (only GM Mist paint here)

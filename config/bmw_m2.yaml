@@ -1,0 +1,138 @@
+# Seeded 2026-07-24 (Milestone 8). Managed by the Car Finder config UI once
+# edited there (edits regenerate this file; previous version kept as .bak).
+#
+# Scope per Bill: G87 only (2023+), 6-speed manual, no M2 CS. The CS needs no
+# forbid rule: it is automatic-only AND $95k+ — the manual requirement and the
+# price hard bound each exclude it, and an unknown-evidence forbid would drag
+# every ordinary M2 into needs-review.
+#
+# Verification reality (2026-07-24 research): the G87's transmission is NOT
+# VIN-encoded and no free structured source carries it, so manual cars ride
+# the claimed chain (listing text / AI extract) into needs_review for a human
+# eyeball — never a silent pass, never a silent reject.
+name: BMW M2 (G87)
+model_key: bmw_m2
+query:
+  make: BMW
+  model: M2
+  trim: null # feeds label G87s "Base"/"Coupe" — a trim filter would drop real cars
+  year_min: null # derived from the year_2023_plus hard constraint
+  year_max: null
+  price_max: null
+  price_margin: 0.08
+  marketcheck_model: null # likely "M2" — verify on the first Marketcheck probe
+hard:
+- key: model_m2
+  label: BMW M2
+  kind: require
+  matcher:
+    vin_attr: model
+    vin_any:
+    - M2
+    rpo: []
+    sticker_text: BMW M2|\bM2\b
+  min_year: null
+- key: gen_g87
+  label: G87 generation
+  kind: require
+  matcher:
+    vin_attr: gen
+    vin_any:
+    - G87
+    rpo: []
+    sticker_text: null
+  min_year: null
+- key: year_2023_plus
+  label: 2023 or newer
+  kind: year_min
+  matcher: null
+  min_year: 2023
+- key: manual_transmission
+  label: 6-speed manual
+  kind: require
+  matcher:
+    vin_attr: trans
+    vin_any:
+    - MANUAL
+    rpo: []
+    sticker_text: 6-SPEED MANUAL|6 SPEED MANUAL|MANUAL TRANSMISSION|\b6MT\b
+  min_year: null
+soft:
+- key: miles
+  label: Mileage
+  kind: numeric
+  weight: 0.2
+  attr: miles
+  ideal: 50000.0
+  hard: 60000.0
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: price
+  label: Price
+  kind: numeric
+  weight: 0.25
+  attr: price
+  ideal: 60000.0
+  hard: 68000.0
+  direction: lower_better
+  exclude_beyond_hard: true
+  preferred: []
+  penalized: []
+  neutral_score: 50.0
+- key: color
+  label: Color
+  kind: color
+  weight: 0.1
+  attr: null
+  ideal: null
+  hard: null
+  direction: lower_better
+  exclude_beyond_hard: false
+  preferred:
+  - blue
+  - yellow
+  - green
+  penalized:
+  - white
+  - black
+  neutral_score: 50.0
+highlights:
+- label: M Carbon bucket seats
+  bonus: 5.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: CARBON BUCKET|M CARBON SEAT|CARBON.{0,15}SEATS
+- label: Carbon fiber roof
+  bonus: 4.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: CARBON (FIBER|FIBRE)?\s?ROOF|M CARBON ROOF
+- label: M Driver's Package
+  bonus: 3.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: M DRIVER'?S? PACKAGE
+- label: Harman Kardon audio
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: HARMAN
+- label: Adaptive M suspension
+  bonus: 2.0
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo: []
+    sticker_text: ADAPTIVE M SUSPENSION
+review_on_unknown_hard: true
