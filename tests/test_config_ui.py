@@ -336,3 +336,58 @@ def test_form_posts_need_no_multipart_dependency():
         "python-multipart appeared as a dependency — fine, but then web._form "
         "can be replaced with request.form() and this guard dropped"
     )
+
+
+# --- auto-sync toggle (model page) ------------------------------------------------
+
+
+def test_model_page_has_auto_sync_toggle_on_by_default(editor_client):
+    c, _ = editor_client
+    r = c.get("/m/ct4v_blackwing").text
+    assert "⏸ Pause auto-sync" in r
+    assert "auto-sync off" not in r
+
+
+def test_pausing_excludes_the_model_from_all_model_runs_only(editor_client):
+    """The point of the toggle: global buttons and the scheduled jobs skip the
+    model, but its own page can still sync it."""
+    from carfinder.runner import _selected
+
+    c, cfg = editor_client
+    r = c.post("/m/ct4v_blackwing/auto-sync", data={"enabled": "0"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/m/ct4v_blackwing?flash=")
+    assert load_profile(cfg / "ct4v_blackwing.yaml").auto_sync is False
+
+    assert "ct4v_blackwing" not in {p.model_key for p in _selected(cfg, None)}
+    assert [p.model_key for p in _selected(cfg, "ct4v_blackwing")] == ["ct4v_blackwing"]
+
+    page = c.get("/m/ct4v_blackwing").text
+    assert "⏸ auto-sync off" in page
+    assert "▶ Resume auto-sync" in page
+    assert "/sync?model=ct4v_blackwing" in page  # per-model buttons stay
+
+
+def test_resuming_puts_the_model_back_in_all_model_runs(editor_client):
+    from carfinder.runner import _selected
+
+    c, cfg = editor_client
+    c.post("/m/ct4v_blackwing/auto-sync", data={"enabled": "0"}, follow_redirects=False)
+    c.post("/m/ct4v_blackwing/auto-sync", data={"enabled": "1"}, follow_redirects=False)
+    assert load_profile(cfg / "ct4v_blackwing.yaml").auto_sync is True
+    assert "ct4v_blackwing" in {p.model_key for p in _selected(cfg, None)}
+
+
+def test_home_page_names_paused_models(editor_client):
+    """A pause must never be a silent no-op on the page with the global buttons."""
+    c, _ = editor_client
+    c.post("/m/bmw_m2/auto-sync", data={"enabled": "0"}, follow_redirects=False)
+    r = c.get("/").text
+    assert "Skipped by everything below" in r
+    assert "BMW M2" in r and "auto-sync off" in r
+
+
+def test_auto_sync_toggle_unknown_model_404s(editor_client):
+    c, _ = editor_client
+    r = c.post("/m/nope/auto-sync", data={"enabled": "0"}, follow_redirects=False)
+    assert r.status_code == 404

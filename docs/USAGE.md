@@ -81,6 +81,24 @@ Browsing needs **no API keys** — it only reads the local database.
   --no-scheduler`.) For a headless box, point Windows Task Scheduler or cron at
   `carfinder sync` instead.
 
+### Parking a model (per-model auto-sync)
+
+A model page has its own **⏸ Pause auto-sync** button. Paused, that model is
+skipped by **every all-model run** — the global **Sync now** / **Full pass** /
+**Rescore** buttons, both scheduled jobs, and `carfinder sync` / `carfinder
+rescore` with no model named. It stops spending Auto.dev quota entirely.
+
+What still updates a paused model, on demand:
+
+- **Sync this model** / **Full pass** / **Rescore this model** on its own page
+- **⟳ Refresh this car** on any of its car detail pages
+- `carfinder sync --model <model_key>` (or `rescore -m <model_key>`)
+
+The flag lives in the profile YAML as `auto_sync: false`, so it applies headless
+too. The home page names any paused models above the global buttons, and both the
+model page and its home-page card carry an **⏸ auto-sync off** badge — a pause is
+never a silent no-op. Hit **▶ Resume auto-sync** to put it back.
+
 **What a sync actually does:** find new/changed listings → decode the VIN
 (trim/body/model — instant, free) → for cars passing the VIN gate, fetch the free
 GM window sticker; if GM has no sticker (pre-2022 cars), fall back to the free
@@ -224,6 +242,7 @@ Two caveats for a brand-new model:
 | Hide a car I've already looked at | **✕** on its row (or **Dismiss** on its detail page); restore via "show dismissed" |
 | Change what I'm looking for | edit `config/*.yaml`, then the **Rescore** button (or `carfinder rescore`) |
 | Add a model | new `config/<model>.yaml`, then `carfinder sync` |
+| Stop a model from auto-syncing | its model page → **⏸ Pause auto-sync** (still syncs from that page on demand) |
 | Check my spend | `carfinder budget` |
 | Back up everything | copy `data/carfinder.sqlite` |
 | Fetch one car's sticker manually | `carfinder fetch-stickers <VIN>` |

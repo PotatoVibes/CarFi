@@ -36,10 +36,16 @@ def _prefixed(progress: Callable[[str], None] | None, name: str):
 
 
 def _selected(config_dir: str | Path, only_model: str | None) -> list[Profile]:
-    """All profiles, or just the one matching `only_model` (by model_key)."""
+    """All profiles, or just the one matching `only_model` (by model_key).
+
+    An all-model run skips profiles with `auto_sync: false` — that flag exists
+    so a model can be parked without deleting its profile. Asking for a model
+    by name always runs it, parked or not: the flag governs automation, not
+    the data.
+    """
     profiles = load_profiles(config_dir)
     if only_model is None:
-        return profiles
+        return [p for p in profiles if p.auto_sync]
     selected = [p for p in profiles if p.model_key == only_model]
     if not selected:
         known = ", ".join(p.model_key for p in profiles)

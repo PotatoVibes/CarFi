@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ name }} — Car Finder{% endblock %}
 {% block content %}
+{% if flash %}<p class="flash">{{ flash }}</p>{% endif %}
 <h1>{{ name }}</h1>
 <p style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
   <span class="badge ranked">{{ counts.ranked }} ranked</span>
   <span class="badge needs_review">{{ counts.needs_review }} needs review</span>
+  {% if not auto_sync %}
+    <span class="badge unknown"
+          title="Global buttons and scheduled jobs skip this model — it updates only from the buttons on this page">⏸ auto-sync off</span>
+  {% endif %}
   {% if show_excluded %}
     <a href="/m/{{ model_key }}">hide excluded</a>
   {% else %}
@@ -30,6 +35,13 @@
     <form method="post" action="/rescore?model={{ model_key }}" data-job style="margin:0"
           title="Re-rank {{ name }} cars only against the current profile — cached data, ~zero API calls. Much faster than the all-models rescore on the home page.">
       <button type="submit" class="secondary">Rescore this model</button>
+    </form>
+    <!-- No data-job: this is an instant profile write, not a background job,
+         so it stays clickable while a sync for another model runs. -->
+    <form method="post" action="/m/{{ model_key }}/auto-sync" style="margin:0"
+          title="{% if auto_sync %}Stop the global Sync/Full pass/Rescore buttons and the scheduled jobs from touching {{ name }}. The three buttons on this page keep working.{% else %}Let {{ name }} sync with the global buttons and the scheduled jobs again.{% endif %}">
+      <input type="hidden" name="enabled" value="{{ '0' if auto_sync else '1' }}">
+      <button type="submit" class="secondary">{{ "⏸ Pause auto-sync" if auto_sync else "▶ Resume auto-sync" }}</button>
     </form>
   </span>
 </p>
