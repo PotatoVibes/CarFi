@@ -31,7 +31,7 @@ docker compose up --build    # builds the image and serves on http://localhost:8
 | `AUTODEV_API_KEY` | Finding listings (the only paid quota) | Free Starter tier: 1,000 calls/mo. Required for `sync`. |
 | `ANTHROPIC_API_KEY` | AI fallback on cars with no window sticker | Optional. Sub-cent per car; hard-capped at `$2/mo`. |
 | `NOTIFY_WEBHOOK_URL` | Push alerts on a great match | Optional. An [ntfy](https://ntfy.sh) topic URL or a Discord webhook URL. |
-| `NOTIFY_THRESHOLD` | Alert score cutoff (0–110) | Default `85`. |
+| `NOTIFY_THRESHOLD` | Alert score cutoff (0–120) | Default `85`. |
 
 **`.env` is git-ignored — never commit it.** Everything else has sane defaults.
 
@@ -54,8 +54,14 @@ uv run carfinder serve       # → http://127.0.0.1:8000   (Docker: already runn
 - **Home** — each model with ranked / needs-review / excluded counts.
 - **Matches** (click a model) — ranked best-first, with a **"new"** badge on cars
   you haven't seen since your last visit (tracked by a browser cookie, per model).
+  Next to the score: 🦄 marks a *unicorn* (ranked, preferred color, within miles,
+  loaded with options) and a gold medal marks a **factory special edition** (IMSA
+  GTLM C8.R, 70th Anniversary, Watkins Glen IMSA, A91-MT…) — hover either for
+  what it means. A dimmed medal is a *claimed* edition: only the listing says so.
+  The **medal only** checkbox filters to special editions.
 - **Car detail** — every hard requirement with a ✓/✗ and a *verified / claimed /
-  unknown* tag, the soft-score bars, highlight badges, price history, any
+  unknown* tag, the soft-score bars, the special edition (if any) and the
+  evidence behind it, highlight badges, price history, any
   cross-source conflicts, a **view listing ↗** link to the dealer's page, and a
   link to the actual **window-sticker PDF**.
 - **Budget** — how much of each month's quota you've used.
@@ -155,7 +161,11 @@ soft:
   excluded. These only pass on *verified* (window-sticker) evidence.
 - **Soft requirements** (`soft:`) are weighted 0–100 curves — miles, price, color.
 - **Highlights** (`highlights:`) are bonus badges (e.g. front lift); the total
-  bonus is capped at +10 so trinkets can't outweigh fundamentals.
+  bonus is capped at +15 so trinkets can't outweigh fundamentals.
+- **Special editions** are not configured here — the catalog is built in
+  (`src/carfinder/editions.py`, evidence in `docs/special_editions.md`) and each
+  one adds a flat **+5** on top of the highlight cap, so totals run 0–120. Don't
+  also add an edition as a highlight: it would count twice.
 - **Server-side prefilter** (`query:`) sets make/model/year/price bounds sent to
   Auto.dev — kept deliberately *wider* than your hard bounds so nothing good is
   filtered out before scoring.

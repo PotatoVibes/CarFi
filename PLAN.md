@@ -235,6 +235,20 @@ Commits: `feat(vin)`, `feat(sources)`, `feat(pipeline)`, `feat(profiles)`,
 
 ---
 
+## Feature — factory special editions (2026-10-02)
+
+Badge + flat **+5** for named factory editions (2022 IMSA GTLM C8.R, 2023 70th
+Anniversary, 2023 Watkins Glen / Sebring / Road Atlanta IMSA Blackwings, 2024
+Mondrian trio, 2025 Petit Pataud, Supra A91-MT / 45th / Final Edition, M2 Turbo
+Design Edition). Deterministic catalog in `editions.py`, gated by VIN scope
+(model line + year), evidence order RPO code > sticker text > VIN serial block
+> complete-sticker "no" > listing headline text (claimed). The +5 sits outside
+the highlight cap (max total 120) and outside `highlight_bonus` (unicorn bar
+unchanged). Research, corpus counts, sources, rejected lookalikes:
+`docs/special_editions.md`.
+
+---
+
 ## Call budget projection
 
 | Activity | Calls/month |
