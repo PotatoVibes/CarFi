@@ -37,7 +37,8 @@
     .score { font-weight: 700; font-size: 16px; }
     /* Factory special-edition medal (templates/_macros.html). Claimed-only
        editions (listing text, no factory evidence) render dimmed. */
-    .edition { display: inline-flex; vertical-align: -2px; }
+    /* background: none — "verified"/"claimed" double as provenance-badge tiles. */
+    .edition { display: inline-flex; vertical-align: -2px; background: none; }
     .edition svg { width: 16px; height: 16px; }
     .edition.claimed { opacity: .55; filter: grayscale(.6); }
     .muted { color: #9aa0a6; }
