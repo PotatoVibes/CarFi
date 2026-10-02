@@ -113,28 +113,12 @@ soft:
   - white
   - black
   neutral_score: 50.0
+# Special editions (A91-MT, 45th Anniversary, MkV Final Edition) are not
+# highlights: editions.py detects them from per-source listing text and the
+# scorer adds a flat +5 outside the highlight cap. Highlights here would stack
+# on top of that — and they matched the merged trim, where Auto.dev's decoder
+# default stamps "MkV Final Edition" on every 2026 Supra.
 highlights:
-- label: A91-MT Edition
-  bonus: 5.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: A91[- ]?MT
-- label: MkV Final Edition
-  bonus: 4.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: MKV FINAL|FINAL EDITION
-- label: 45th Anniversary Edition
-  bonus: 3.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo: []
-    sticker_text: 45TH ANNIVERSARY
 - label: Driver Assist Package
   bonus: 2.0
   matcher:
