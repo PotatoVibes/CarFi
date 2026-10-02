@@ -1,26 +1,16 @@
-# Seeded 2026-07-24 (Milestone 8). Managed by the Car Finder config UI once
-# edited there (edits regenerate this file; previous version kept as .bak).
-#
-# Scope per Bill: G87 only (2023+), 6-speed manual, no M2 CS. The CS needs no
-# forbid rule: it is automatic-only AND $95k+ — the manual requirement and the
-# price hard bound each exclude it, and an unknown-evidence forbid would drag
-# every ordinary M2 into needs-review.
-#
-# Verification reality (2026-07-24 research): the G87's transmission is NOT
-# VIN-encoded and no free structured source carries it, so manual cars ride
-# the claimed chain (listing text / AI extract) into needs_review for a human
-# eyeball — never a silent pass, never a silent reject.
+# Managed by the Car Finder config UI (edits regenerate this file;
+# the previous version is kept alongside as .bak).
 name: BMW M2 (G87)
 model_key: bmw_m2
 query:
   make: BMW
   model: M2
-  trim: null # feeds label G87s "Base"/"Coupe" — a trim filter would drop real cars
-  year_min: null # derived from the year_2023_plus hard constraint
+  trim: null
+  year_min: null
   year_max: null
   price_max: null
   price_margin: 0.08
-  marketcheck_model: 2 Series # MC probe 2026-07-24: "M2" = 0 hits; M2s live under "2 Series"
+  marketcheck_model: 2 Series
 hard:
 - key: model_m2
   label: BMW M2
@@ -136,3 +126,4 @@ highlights:
     rpo: []
     sticker_text: ADAPTIVE M SUSPENSION
 review_on_unknown_hard: true
+auto_sync: false

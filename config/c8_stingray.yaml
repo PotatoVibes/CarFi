@@ -10,6 +10,7 @@ query:
   year_max: null
   price_max: null
   price_margin: 0.08
+  marketcheck_model: null
 hard:
 - key: model_stingray
   label: Corvette Stingray
@@ -82,6 +83,16 @@ hard:
     - F55
     sticker_text: MAGNETIC RIDE|MAGNETIC SELECTIVE|MAGNERIDE|MAGNETO RHEOLOGICAL
   min_year: null
+- key: front_lift_with_memory
+  label: Front Lift with memory
+  kind: require
+  matcher:
+    vin_attr: null
+    vin_any: []
+    rpo:
+    - E60
+    sticker_text: null
+  min_year: null
 soft:
 - key: miles
   label: Mileage
@@ -126,14 +137,6 @@ soft:
   - brown
   neutral_score: 50.0
 highlights:
-- label: Front lift w/ memory
-  bonus: 8.0
-  matcher:
-    vin_attr: null
-    vin_any: []
-    rpo:
-    - E60
-    sticker_text: FRONT LIFT
 - label: Performance Data Recorder
   bonus: 3.0
   matcher:
@@ -254,3 +257,4 @@ highlights:
     - AQ9
     sticker_text: null
 review_on_unknown_hard: true
+auto_sync: true
