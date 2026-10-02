@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 from fastapi.testclient import TestClient
@@ -149,6 +150,68 @@ def test_unicorn_icon_marks_qualifying_cars_only(seeded_settings):
     conn.commit()
     conn.close()
     assert "🦄" in _client(seeded_settings).get("/m/ct4v_blackwing").text
+
+
+def _mark_edition(settings, vin, label, provenance):
+    import json
+
+    from carfinder import db
+
+    conn = db.bootstrap(str(settings.db_path))
+    bd = json.loads(
+        conn.execute("SELECT breakdown_json FROM match_results WHERE vin=?", (vin,)).fetchone()[0]
+    )
+    bd["edition"] = {
+        "key": "x",
+        "label": label,
+        "group": "edition",
+        "status": "badge",
+        "provenance": provenance,
+        "detail": "factory option code ZLE · 2023, 99 built, Electric Blue",
+        "matched": True,
+        "bonus": 5.0,
+    }
+    conn.execute(
+        """UPDATE match_results SET edition=?, edition_provenance=?, edition_bonus=5,
+           total=total+5, breakdown_json=? WHERE vin=?""",
+        (label, provenance, json.dumps(bd), vin),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_special_edition_medal_marks_edition_cars_only(seeded_settings):
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert 'class="edition verified"' not in r
+    assert 'id="i-edition"' in r  # the medal symbol is defined once, in base.html
+    _mark_edition(seeded_settings, BW_VIN, "Watkins Glen IMSA Edition", "verified")
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert 'class="edition verified"' in r
+    assert "special edition — Watkins Glen IMSA Edition (verified) · +5 score" in r
+    assert 'data-edition="watkins glen imsa edition"' in r  # filter + search hook
+    assert 'id="edition-only"' in r
+    # Independent of the unicorn: the seeded car is still black, so no 🦄.
+    assert "🦄" not in r
+
+
+def test_claimed_special_edition_renders_dimmed(seeded_settings):
+    _mark_edition(seeded_settings, BW_VIN, "Watkins Glen IMSA Edition", "claimed")
+    r = _client(seeded_settings).get("/m/ct4v_blackwing").text
+    assert 'class="edition claimed"' in r
+    assert "(claimed by a listing, not verified)" in r
+
+
+def test_detail_explains_the_edition_bonus(seeded_settings):
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    assert "/120" in r  # soft 100 + highlights 15 + edition 5
+    assert "Special edition" not in r
+    _mark_edition(seeded_settings, BW_VIN, "Watkins Glen IMSA Edition", "verified")
+    r = _client(seeded_settings).get(f"/v/{BW_VIN}").text
+    assert "<h2>Special edition</h2>" in r
+    assert "Watkins Glen IMSA Edition" in r
+    assert "factory option code ZLE" in r
+    assert re.search(r"\+ special edition\s+5</span>", r)  # soft X + bonus Y + edition 5
+    assert 'class="edition verified"' in r
 
 
 def test_favicon_is_declared(seeded_settings):

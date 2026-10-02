@@ -1,0 +1,8 @@
+{# Factory special-edition medal (editions.py), drawn from the <symbol> in
+   base.html. `provenance` is verified | claimed; claimed renders dimmed. #}
+{% macro edition_icon(label, provenance, bonus) -%}
+{%- set tip = "special edition — " ~ label
+      ~ (" (claimed by a listing, not verified)" if provenance == "claimed" else " (verified)")
+      ~ " · +" ~ "%.0f"|format(bonus) ~ " score" -%}
+<span class="edition {{ provenance }}" title="{{ tip }}" role="img" aria-label="{{ tip }}"><svg><use href="#i-edition"/></svg></span>
+{%- endmacro %}

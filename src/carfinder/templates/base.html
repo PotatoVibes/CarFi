@@ -35,6 +35,11 @@
     .new { background: #16305a; color: #9ec2ff; }
     .sold { background: #2a2f3a; color: #9aa0a6; text-decoration: line-through; }
     .score { font-weight: 700; font-size: 16px; }
+    /* Factory special-edition medal (templates/_macros.html). Claimed-only
+       editions (listing text, no factory evidence) render dimmed. */
+    .edition { display: inline-flex; vertical-align: -2px; }
+    .edition svg { width: 16px; height: 16px; }
+    .edition.claimed { opacity: .55; filter: grayscale(.6); }
     .muted { color: #9aa0a6; }
     .bar { height: 8px; background: #262b36; border-radius: 4px; overflow: hidden; }
     .bar > span { display: block; height: 100%; background: #6ea8ff; }
@@ -60,6 +65,16 @@
   </style>
 </head>
 <body>
+  <!-- Special-edition medal, defined once; drawn via <use href="#i-edition">. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-edition" viewBox="0 0 16 16">
+      <path d="M4.1 8.3 1.9 15.2l2.6-1 1.5 2.1 2.2-5.7Z" fill="#d23c40"/>
+      <path d="M11.9 8.3l2.2 6.9-2.6-1-1.5 2.1-2.2-5.7Z" fill="#a52d31"/>
+      <circle cx="8" cy="6.2" r="5.6" fill="#e8b93e" stroke="#8a6410" stroke-width=".9"/>
+      <circle cx="8" cy="6.2" r="4.05" fill="none" stroke="#fff1bf" stroke-width=".6" opacity=".9"/>
+      <path d="M8 2.95l1 2.03 2.24.33-1.62 1.58.38 2.23L8 8.07 6 9.12l.38-2.23-1.62-1.58L7 4.98Z" fill="#fffaf0"/>
+    </symbol>
+  </svg>
   <header>
     <span class="brand">🏎️ Car Finder</span>
     <a href="/">Home</a>

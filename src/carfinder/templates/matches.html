@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import edition_icon %}
 {% block title %}{{ name }} — Car Finder{% endblock %}
 {% block content %}
 <h1>{{ name }}</h1>
@@ -51,6 +52,9 @@
   <label class="muted" style="user-select:none">
     <input id="fav-only" type="checkbox"> ♥ only
   </label>
+  <label class="muted" style="user-select:none" title="factory special editions only">
+    <input id="edition-only" type="checkbox"> <span class="edition"><svg><use href="#i-edition"/></svg></span> only
+  </label>
   <span id="row-count" class="muted"></span>
 </p>
 
@@ -78,10 +82,11 @@
         data-miles="{{ r.miles if r.miles is not none else -1 }}"
         data-price="{{ r.price if r.price is not none else -1 }}" data-bonus="{{ r.highlight_bonus }}"
         data-sticker="{{ r.sticker_status or '' }}" data-status="{{ r.status }}" data-vin="{{ r.vin }}"
-        data-fav="{{ '1' if r.favorited else '' }}"
+        data-fav="{{ '1' if r.favorited else '' }}" data-edition="{{ (r.edition or '')|lower }}"
         data-dist="{{ r.distance_mi if r.distance_mi is not none else 99999 }}">
       <td class="score">{{ "%.0f"|format(r.total) }}{% if r.vin in unicorn_vins
-          %} <span title="unicorn — clears every hard requirement in a preferred color, within mileage, loaded with options">🦄</span>{% endif %}</td>
+          %} <span title="unicorn — clears every hard requirement in a preferred color, within mileage, loaded with options">🦄</span>{% endif %}{% if r.edition
+          %} {{ edition_icon(r.edition, r.edition_provenance, r.edition_bonus) }}{% endif %}</td>
       <td><span class="badge {{ r.verdict }}">{{ r.verdict.replace("_"," ") }}</span>
           {% if r.is_new %}<span class="badge new">new</span>{% endif %}
           {% if r.status == "presumed_sold" %}<span class="badge sold">sold</span>{% endif %}
@@ -138,6 +143,7 @@
     const verdictSel = document.getElementById("verdict-filter");
     const hideSold = document.getElementById("hide-sold");
     const favOnly = document.getElementById("fav-only");
+    const editionOnly = document.getElementById("edition-only");
     const count = document.getElementById("row-count");
 
     function applyFilter() {
@@ -147,11 +153,14 @@
       rows.forEach(function (tr) {
         // data-color carries the paint name (shown only in a tooltip), so
         // typing "rift" still finds the White (Rift Metallic) car.
-        const hay = (tr.textContent + " " + tr.dataset.vin + " " + tr.dataset.color).toLowerCase();
+        // data-edition likewise ("watkins" finds the Watkins Glen IMSA car).
+        const hay = (tr.textContent + " " + tr.dataset.vin + " " + tr.dataset.color + " " +
+          tr.dataset.edition).toLowerCase();
         let ok = !needle || hay.includes(needle);
         if (ok && verdict) ok = tr.dataset.verdict === verdict;
         if (ok && hideSold.checked) ok = tr.dataset.status !== "presumed_sold";
         if (ok && favOnly.checked) ok = tr.dataset.fav === "1";
+        if (ok && editionOnly.checked) ok = tr.dataset.edition !== "";
         tr.hidden = !ok;
         if (ok) shown++;
       });
@@ -162,6 +171,7 @@
     verdictSel.addEventListener("change", applyFilter);
     hideSold.addEventListener("change", applyFilter);
     favOnly.addEventListener("change", applyFilter);
+    editionOnly.addEventListener("change", applyFilter);
     applyFilter();
 
     let sortKey = null, asc = false;

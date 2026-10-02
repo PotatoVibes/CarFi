@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import edition_icon %}
 {% set v = d.vehicle %}
 {% block title %}{{ v.vin }} — Car Finder{% endblock %}
 {% block content %}
@@ -33,10 +34,13 @@
 
 {% if d.match %}
 <p>
-  <span class="score">{{ "%.0f"|format(d.match.total) }}</span>/110 &nbsp;
+  <span class="score">{{ "%.0f"|format(d.match.total) }}</span>/{{ "%.0f"|format(max_total) }}
+  {% if d.match.edition %}{{ edition_icon(d.match.edition, d.match.edition_provenance, d.match.edition_bonus) }}{% endif %}
+  &nbsp;
   <span class="badge {{ d.match.verdict }}">{{ d.match.verdict.replace("_"," ") }}</span>
   <span class="muted">soft {{ "%.0f"|format(d.match.soft_score) }} + bonus
-    {{ "%.0f"|format(d.match.highlight_bonus) }}</span>
+    {{ "%.0f"|format(d.match.highlight_bonus) }}{% if d.match.edition_bonus %} + special edition
+    {{ "%.0f"|format(d.match.edition_bonus) }}{% endif %}</span>
 </p>
 {% endif %}
 
@@ -104,6 +108,15 @@
   </tr>
   {% endfor %}
 </tbody></table>
+
+{% set ed = d.breakdown.edition %}
+{% if ed %}
+<h2>Special edition</h2>
+<p>{{ edition_icon(ed.label, ed.provenance, ed.bonus) }}
+  <strong>{{ ed.label }}</strong> +{{ "%.0f"|format(ed.bonus) }}
+  <span class="badge {{ ed.provenance }}">{{ ed.provenance }}</span>
+  <span class="muted">{{ ed.detail }}</span></p>
+{% endif %}
 
 {% set badges = d.breakdown.highlights | selectattr("matched") | list %}
 {% if badges %}

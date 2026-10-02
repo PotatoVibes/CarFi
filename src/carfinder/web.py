@@ -30,6 +30,7 @@ from .db import bootstrap, connect
 from .pipeline import PipelineStats
 from .profiles import ProfileError, load_profile
 from .runner import load_profiles
+from .scorer import MAX_TOTAL
 
 log = logging.getLogger("carfinder.web")
 
@@ -275,6 +276,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "chip_hex": colors.chip_hex,
                 "resolved_chip_hex": colors.resolved_chip_hex,
                 "sticker_pdf": sticker_pdf,
+                "max_total": MAX_TOTAL,
                 "home_zip": settings.home_zip,
                 "has_autodev_key": bool(settings.autodev_api_key),
             },
