@@ -16,6 +16,9 @@
       <span class="badge ranked">{{ m.counts.ranked }} ranked</span>
       <span class="badge needs_review">{{ m.counts.needs_review }} review</span>
       <span class="badge excluded">{{ m.counts.excluded }} excluded</span>
+      {% if not m.auto_sync %}
+        <span class="badge unknown" title="Paused — the buttons below and the scheduled jobs skip this model">⏸ auto-sync off</span>
+      {% endif %}
     </div>
   </a>
   {% else %}
@@ -24,6 +27,12 @@
 </div>
 
 <h2 style="margin-top:28px">Actions</h2>
+{% set paused = models | rejectattr("auto_sync") | list %}
+{% if paused %}
+<p class="muted">Skipped by everything below (and by the scheduled jobs):
+  {% for m in paused %}<a href="/m/{{ m.model_key }}">{{ m.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
+  Sync them from their own model page, or resume auto-sync there.</p>
+{% endif %}
 {% if not has_autodev_key %}
 <p class="muted">No AUTODEV_API_KEY configured — syncing is disabled, but browsing and
   rescoring still work.</p>

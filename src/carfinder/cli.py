@@ -44,6 +44,18 @@ def fetch_stickers(vins: list[str]) -> None:
         conn.close()
 
 
+def _note_paused(config_dir, only_model: str | None) -> None:
+    """Name the models an all-model run skipped, so `auto_sync: false` is never
+    a silent no-op. Nothing to say when a model was named explicitly."""
+    if only_model is not None:
+        return
+    from .runner import load_profiles
+
+    parked = [p.model_key for p in load_profiles(config_dir) if not p.auto_sync]
+    if parked:
+        typer.echo(f"  skipped (auto_sync off): {', '.join(parked)} — run with --model to include")
+
+
 @app.command()
 def sync(
     full: bool = False,
@@ -55,7 +67,9 @@ def sync(
         "truncated; delist detection is skipped automatically.",
     ),
 ) -> None:
-    """Run a sync over every configured profile — or just one with --model."""
+    """Run a sync over every configured profile — or just one with --model.
+
+    Profiles marked `auto_sync: false` are skipped unless named with --model."""
     from datetime import UTC, datetime
 
     from .runner import run_sync
@@ -88,6 +102,7 @@ def sync(
             f"{s.excluded} excluded), {s.sync.new_vins} new{mc}, "
             f"{s.stickers_fetched} sticker fetches"
         )
+    _note_paused(settings.config_dir, model)
 
 
 @app.command()
@@ -104,7 +119,9 @@ def rescore(
     Run this after editing a profile YAML — it re-ranks the existing cars using
     cached sticker/AI data, so it makes ~zero API calls and no Auto.dev key is
     needed. After editing ONE profile, --only-model skips the other models'
-    cars entirely (a full-database rescore is thousands of cars)."""
+    cars entirely (a full-database rescore is thousands of cars).
+
+    Profiles marked `auto_sync: false` are skipped unless named."""
     from datetime import UTC, datetime
 
     from .runner import run_rescore
@@ -128,6 +145,7 @@ def rescore(
             f"  {model_key}: re-scored {s.scored} ({s.ranked} ranked, "
             f"{s.needs_review} review, {s.excluded} excluded)"
         )
+    _note_paused(settings.config_dir, only_model)
 
 
 @app.command()

@@ -180,3 +180,13 @@ def test_empty_profile_is_valid():
     p = load_profile_str("name: x\nmodel_key: y\n")
     assert isinstance(p, Profile)
     assert p.hard == [] and p.soft == [] and p.highlights == []
+
+
+def test_auto_sync_defaults_on_and_parses_off():
+    """The park flag: absent means "include in every run" (existing profiles
+    keep their behavior), and `auto_sync: false` round-trips through YAML."""
+    minimal = "name: X\nmodel_key: x\n"
+    assert load_profile_str(minimal).auto_sync is True
+    parked = load_profile_str(minimal + "auto_sync: false\n")
+    assert parked.auto_sync is False
+    assert load_profile_str(dump_profile(parked)).auto_sync is False

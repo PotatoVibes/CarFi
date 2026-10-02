@@ -187,6 +187,14 @@ def set_colors(
     return _validated(p)
 
 
+def set_auto_sync(profile: Profile, enabled: bool) -> Profile:
+    """Include (True) or exclude (False) this model from all-model runs.
+    Excluded models still sync from their own model page and per-car Refresh."""
+    p = profile.model_copy(deep=True)
+    p.auto_sync = enabled
+    return _validated(p)
+
+
 # --- persistence ---------------------------------------------------------------
 
 

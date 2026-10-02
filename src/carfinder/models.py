@@ -212,6 +212,12 @@ class Profile(BaseModel):
     # An unknown-provenance hard requirement routes to "needs review" rather
     # than a silent rejection. Flip to False to treat unknown as failure.
     review_on_unknown_hard: bool = True
+    # False parks this model: every all-model run (the global Sync / Full pass /
+    # Rescore buttons, the scheduled jobs, `carfinder sync` with no --model)
+    # skips it, so it stops spending API calls and stops re-ranking. Naming the
+    # model explicitly always runs it — the model page's own buttons and a
+    # per-car Refresh ignore this flag. Toggled from the model page.
+    auto_sync: bool = True
 
 
 # --- Scoring input ---------------------------------------------------------

@@ -1,31 +1,16 @@
-# Seeded 2026-07-24 (Milestone 8). Managed by the Car Finder config UI once
-# edited there (edits regenerate this file; previous version kept as .bak).
-#
-# Scope per Bill: GR Supra 3.0 Premium, 6-speed manual. The 6MT exists only
-# 2023+ — and every 2020-2022 VIN pattern is corpus-verified automatic — so
-# the 2023+ year gate narrows the query without trusting any listing field.
-#
-# Verification reality (2026-07-24 research + fixture capture): 3.0 vs 2.0
-# is VIN-verified (pos 6), and 2020-22 cars are VIN-verified automatic. For
-# 2023+ neither the VIN nor toyotapartsdeal can verify the transmission —
-# the parts catalog collapses trims (a real A91-MT manual and a Premium auto
-# return identical, self-contradictory attributes; see partsdeal.py) — so
-# manual 2023+ cars ride claimed listing text into needs_review for a human
-# eyeball, exactly like the M2. "Premium" likewise: NOT VIN-encoded, catalog
-# says "BASE" even for real Premiums, so the gate rides Premium-exclusive
-# equipment markers (JBL / head-up display) and listing text into review.
+# Managed by the Car Finder config UI (edits regenerate this file;
+# the previous version is kept alongside as .bak).
 name: GR Supra 3.0 Premium
 model_key: gr_supra
 query:
   make: Toyota
-  model: Supra,GR Supra # feeds are split between the two names; comma-list covers both
-  trim: null # trim strings vary ("3.0 Premium", "A91", ...) — scorer decides
-  year_min: null # derived from the year_2023_plus hard constraint
+  model: Supra,GR Supra
+  trim: null
+  year_min: null
   year_max: null
   price_max: null
   price_margin: 0.08
-  marketcheck_model: Supra # MC taxonomy verified live 2026-07-24: "GR Supra" = 0 hits, "Supra" works
-
+  marketcheck_model: Supra
 hard:
 - key: model_supra
   label: GR Supra
@@ -134,3 +119,4 @@ highlights:
     rpo: []
     sticker_text: RED.{0,15}CALIPER|CALIPERS?,?\s*RED
 review_on_unknown_hard: true
+auto_sync: false

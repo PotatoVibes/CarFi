@@ -35,6 +35,28 @@ def test_selected_filters_to_one_model():
         _selected(ROOT / "config", "nope")
 
 
+def test_selected_skips_parked_profiles_unless_named(tmp_path):
+    """`auto_sync: false` parks a model: every all-model run (global buttons,
+    the scheduled jobs, `carfinder sync`) skips it, while the per-model path
+    (model page buttons / --model) still runs it."""
+    import shutil
+
+    from carfinder.profile_edit import save_profile, set_auto_sync
+    from carfinder.profiles import load_profile
+    from carfinder.runner import _selected
+
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    for f in (ROOT / "config").glob("*.yaml"):
+        shutil.copyfile(f, cfg / f.name)
+    path = cfg / "bmw_m2.yaml"
+    save_profile(path, set_auto_sync(load_profile(path), False))
+
+    assert "bmw_m2" not in {p.model_key for p in _selected(cfg, None)}
+    assert "ct4v_blackwing" in {p.model_key for p in _selected(cfg, None)}
+    assert [p.model_key for p in _selected(cfg, "bmw_m2")] == ["bmw_m2"]
+
+
 def test_build_pipeline_requires_autodev_key(seeded_settings):
     conn = db.bootstrap(":memory:")
     with pytest.raises(ValueError, match="AUTODEV_API_KEY"):

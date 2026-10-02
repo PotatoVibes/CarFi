@@ -200,6 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "model_key": p.model_key,
                     "name": p.name,
                     "counts": store.match_counts(c, p.model_key),
+                    "auto_sync": p.auto_sync,
                 }
                 for p in app.state.profiles
             ]
@@ -222,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_key: str,
         show_excluded: bool = False,
         show_dismissed: bool = False,
+        flash: str | None = None,
     ):
         profile = app.state.profiles_by_key.get(model_key)
         cookie_key = f"seen_{model_key}"
@@ -253,6 +255,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "chip_hex": colors.chip_hex,
                 "resolved_chip_hex": colors.resolved_chip_hex,
                 "unicorn_vins": unicorn_vins,
+                "auto_sync": profile.auto_sync if profile else True,
+                "flash": flash,
             },
         )
         resp.set_cookie(cookie_key, _now_iso(), max_age=60 * 60 * 24 * 365)
@@ -375,8 +379,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
-    def _apply_and_save(model_key: str, mutate) -> RedirectResponse:
-        """Load the profile fresh from disk, apply an edit, save, hot-reload."""
+    def _apply_and_save(
+        model_key: str,
+        mutate,
+        back: str | None = None,
+        message: str | None = None,
+    ) -> RedirectResponse:
+        """Load the profile fresh from disk, apply an edit, save, hot-reload.
+
+        `back` is the page to return to (the config editor unless a caller —
+        e.g. the model page's auto-sync toggle — asks for its own page)."""
+        back = back or f"/config/{model_key}"
         path = _profile_path(model_key)
         if path is None:
             return HTMLResponse("Unknown model", status_code=404)  # type: ignore[return-value]
@@ -385,11 +398,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             profile_edit.save_profile(path, updated)
         except (ProfileError, ValueError) as exc:
             return RedirectResponse(
-                f"/config/{model_key}?flash={quote(f'Rejected: {exc}'[:180])}", status_code=303
+                f"{back}?flash={quote(f'Rejected: {exc}'[:180])}", status_code=303
             )
         _reload_profiles()
-        saved_msg = quote("Saved — hit Rescore (home page) to re-rank existing cars.")
-        return RedirectResponse(f"/config/{model_key}?flash={saved_msg}", status_code=303)
+        saved = message or "Saved — hit Rescore (home page) to re-rank existing cars."
+        return RedirectResponse(f"{back}?flash={quote(saved)}", status_code=303)
 
     @app.post("/config/{model_key}/feature")
     async def config_feature(request: Request, model_key: str):
@@ -475,6 +488,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise ProfileError(f"unknown remove kind {kind!r}")
 
         return _apply_and_save(model_key, mutate)
+
+    @app.post("/m/{model_key}/auto-sync")
+    async def toggle_auto_sync(request: Request, model_key: str):
+        """Park or un-park this model. Parked (`auto_sync: false`), it is skipped
+        by every all-model run — the global Sync / Full pass / Rescore buttons,
+        the scheduled Mon/Wed/Fri and Sunday jobs, and `carfinder sync` with no
+        --model. This page's own buttons and per-car Refresh still work."""
+        form = await _form(request)
+        enabled = _field(form, "enabled") == "1"
+        name = getattr(app.state.profiles_by_key.get(model_key), "name", model_key)
+        message = (
+            f"Auto-sync ON — {name} syncs with the global buttons and scheduled jobs again."
+            if enabled
+            else f"Auto-sync OFF — {name} now updates only from this page (global "
+            "buttons and scheduled jobs skip it)."
+        )
+        return _apply_and_save(
+            model_key,
+            lambda p: profile_edit.set_auto_sync(p, enabled),
+            back=f"/m/{model_key}",
+            message=message,
+        )
 
     def _toggle_flag(vin: str, next: str, column: str, opposite: str):
         """Toggle a user flag on a vehicle; setting it clears the opposite
