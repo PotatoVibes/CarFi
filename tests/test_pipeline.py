@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import pytest
 
 from carfinder import db
 from carfinder.budget import GM_STICKER, BudgetGuard, ProviderBudget
@@ -854,3 +855,47 @@ def test_refresh_vin_404_marks_presumed_sold():
     assert v["status"] == "presumed_sold"
     # Still (re)scored — the match row survives for the UI.
     assert _match(conn, BW_VIN) is not None
+
+
+# --- special editions (editions.py) ----------------------------------------
+
+Y70_VIN = "1G1YC3D49P5503380"  # cached fixture: 2023 3LT convertible, 70th Anniversary
+IMPACT_VIN = "1G6D65RP4R0562027"  # cached fixture: 2024 Blackwing Impact Edition (ZLJ)
+
+
+@pytest.mark.parametrize(
+    ("vin", "year", "make", "model", "config", "label", "code"),
+    [
+        (Y70_VIN, 2023, "Chevrolet", "Corvette", "c8_stingray", "70th Anniversary Edition", "Y70"),
+        (IMPACT_VIN, 2024, "Cadillac", "CT4-V", "ct4v_blackwing", "Impact Edition", "ZLJ"),
+    ],
+)
+def test_special_edition_from_the_window_sticker_end_to_end(
+    vin, year, make, model, config, label, code
+):
+    rows = [
+        ListingRow(
+            vin=vin, source="autodev", price=69000, miles=8000, year=year, make=make, model=model
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    pipe.run(load_profile(ROOT / "config" / f"{config}.yaml"), run_id="r1")
+    m = _match(conn, vin)
+    assert m["edition"] == label
+    assert m["edition_provenance"] == "verified"
+    assert m["edition_bonus"] == 5.0
+    # The bump is on top of the (capped) highlights, not inside them.
+    assert m["total"] == pytest.approx(m["soft_score"] + m["highlight_bonus"] + 5.0)
+    ed = json.loads(m["breakdown_json"])["edition"]
+    assert ed["label"] == label and ed["provenance"] == "verified"
+    assert code in ed["detail"]
+
+
+def test_ordinary_car_persists_no_edition():
+    rows = [ListingRow(vin=BW_VIN, source="autodev", price=58000, miles=30000, year=2022)]
+    pipe, conn = _pipeline(rows)
+    pipe.run(load_profile(ROOT / "config" / "ct4v_blackwing.yaml"), run_id="r1")
+    m = _match(conn, BW_VIN)
+    assert m["edition"] is None and m["edition_provenance"] is None
+    assert m["edition_bonus"] == 0
+    assert json.loads(m["breakdown_json"])["edition"] is None

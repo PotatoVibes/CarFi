@@ -247,6 +247,20 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX idx_listings_vin ON listings (vin);
         """,
     ),
+    (
+        13,
+        """
+        -- Factory special edition (editions.py), denormalized like the color
+        -- so the match board renders its badge without parsing breakdowns.
+        -- edition = display label (NULL = not a special edition),
+        -- edition_provenance = verified | claimed, edition_bonus = the score
+        -- bump applied outside the highlight cap. NULL/0 until the next
+        -- (re)score.
+        ALTER TABLE match_results ADD COLUMN edition TEXT;
+        ALTER TABLE match_results ADD COLUMN edition_provenance TEXT;
+        ALTER TABLE match_results ADD COLUMN edition_bonus REAL NOT NULL DEFAULT 0;
+        """,
+    ),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

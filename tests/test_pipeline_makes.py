@@ -206,3 +206,51 @@ def test_2020_supra_vin_fast_path_excludes_before_any_fetch():
     assert hard["manual_transmission"]["status"] == "fail"
     assert hard["manual_transmission"]["provenance"] == "verified"
     assert hard["year_2023_plus"]["status"] == "fail"
+
+
+def _insert_listing(conn, source: str, vin: str, raw: dict) -> None:
+    conn.execute(
+        """INSERT INTO listings (source, vin, raw_json, first_seen, last_seen)
+           VALUES (?, ?, ?, '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')""",
+        (source, vin, json.dumps(raw)),
+    )
+    conn.commit()
+
+
+def test_supra_edition_rides_marketcheck_listing_text_not_autodev_trim():
+    """Auto.dev's decoded Supra trim is a default ("3.0" on every 2023, "MkV
+    Final Edition" on every 2026) — it must never name an edition. The
+    Marketcheck row's build.trim for the same VIN does: a claimed +5."""
+    rows = [
+        _row(
+            SUPRA_MT_VIN,
+            year=2023,
+            make="Toyota",
+            model="GR Supra",
+            trim="3.0",
+            raw={"vehicle.trim": "MkV Final Edition"},
+        )
+    ]
+    pipe, conn = _pipeline(rows)
+    profile = load_profile(ROOT / "config" / "gr_supra.yaml")
+    pipe.run(profile, run_id="r1")
+    m = conn.execute("SELECT * FROM match_results WHERE vin=?", (SUPRA_MT_VIN,)).fetchone()
+    assert m["edition"] is None and m["edition_bonus"] == 0
+
+    _insert_listing(
+        conn,
+        "marketcheck",
+        SUPRA_MT_VIN,
+        {
+            "heading": "2023 Toyota GR Supra 3.0",
+            "build": {"trim": "A91-MT Edition", "version": "3.0 A91-MT Edition"},
+            "dealer": {"name": "Burnout Garage"},
+        },
+    )
+    pipe.rescore(profile)
+    m = conn.execute("SELECT * FROM match_results WHERE vin=?", (SUPRA_MT_VIN,)).fetchone()
+    assert m["edition"] == "A91-MT Edition"
+    assert m["edition_provenance"] == "claimed"
+    assert m["edition_bonus"] == 5.0
+    # Listing text feeds the edition only — the manual gate is untouched by it.
+    assert _hard(conn, SUPRA_MT_VIN)["manual_transmission"]["status"] == "needs_review"

@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import httpx
 
-from . import colors, db
+from . import colors, db, editions
 from . import vin as vin_decode
 from .ai import Attribute, HaikuExtractor
 from .budget import BudgetExceeded, BudgetGuard
@@ -35,7 +35,7 @@ from .notify import Notifier
 from .partsdeal import PartsDealFetcher
 from .query import build_listing_params, build_marketcheck_params
 from .reconcile import Facts, reconcile
-from .scorer import score_vehicle
+from .scorer import MAX_TOTAL, score_vehicle
 from .sources import AutoDevSource, ListingSource, MarketcheckSource, scrub_api_key
 from .sticker_parser import PARSER_VERSION, ParsedSticker, parse_sticker, vehicle_kwargs
 from .stickers import FOUND, StickerFetcher
@@ -567,6 +567,23 @@ class Pipeline:
         except ValueError:
             return ""
 
+    def _listing_text(self, vin: str) -> str:
+        """Edition-relevant headline text from EVERY source's listing row —
+        claimed evidence for special-edition detection only (see
+        editions.listing_text for which fields count, and why)."""
+        rows = self._conn.execute(
+            "SELECT source, raw_json FROM listings WHERE vin=? ORDER BY source", (vin,)
+        ).fetchall()
+        payloads = []
+        for r in rows:
+            try:
+                raw = json.loads(r["raw_json"])
+            except ValueError:
+                continue
+            if isinstance(raw, dict):
+                payloads.append((r["source"], raw))
+        return editions.listing_text(payloads, vin_decode.wmi_make(vin))
+
     def _finish_vin(self, vin, profile, result, parsed, row, stats: PipelineStats) -> None:
         prior = self._conn.execute(
             "SELECT verdict, total FROM match_results WHERE vin=?", (vin,)
@@ -708,7 +725,7 @@ class Pipeline:
         if was:
             return False
         title = f"Car Finder: {profile.name} scored {result.total:.0f}"
-        body = f"VIN {vin} — verdict {result.verdict}, total {result.total:.0f}/110."
+        body = f"VIN {vin} — verdict {result.verdict}, total {result.total:.0f}/{MAX_TOTAL:.0f}."
         return self._notifier.notify_match(vin, title, body)
 
     def _build_vehicle(
@@ -731,6 +748,7 @@ class Pipeline:
         price = row["price"] if row else None
         listing_year = row["year"] if row else None
         claimed_text = " ".join(t for t in (_claimed_text(row), manual_text, catalog_text) if t)
+        listing_text = self._listing_text(vin)
         facts = vin_decode.decode(vin)
 
         if parsed is None and sheet is not None:
@@ -741,6 +759,7 @@ class Pipeline:
                 kw["year"] = listing_year or vin_decode.model_year(vin)
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
+            kw["listing_text"] = listing_text
             # The FE suspension code is as definitive as a VIN char — it joins
             # the facts so Z51/MagneRide resolve on build-sheet-only cars.
             kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
@@ -756,6 +775,7 @@ class Pipeline:
             # Keep the listing text as a claimed fallback alongside verified data.
             kw["claimed_text"] = claimed_text
             kw["claimed_features"] = claimed_features
+            kw["listing_text"] = listing_text
             kw["vin_facts"] = facts | c8_suspension_facts(model_key, kw["verified_rpo"])
             self._fallback_listing_color(kw, model_key, row)
             return Vehicle(**kw)
@@ -770,6 +790,7 @@ class Pipeline:
             claimed_text=claimed_text,
             color_text=(row["color"] if row else None),
             claimed_features=claimed_features,
+            listing_text=listing_text,
         )
 
     @staticmethod
@@ -850,6 +871,7 @@ class Pipeline:
             "hard": [r.model_dump(mode="json") for r in result.hard],
             "soft": [r.model_dump(mode="json") for r in result.soft],
             "highlights": [r.model_dump(mode="json") for r in result.highlights],
+            "edition": result.edition.model_dump(mode="json") if result.edition else None,
         }
         # The scorer's resolved color, denormalized so lists render the same
         # color the detail page explains (listing text can disagree).
@@ -857,14 +879,17 @@ class Pipeline:
         self._conn.execute(
             """INSERT INTO match_results
                (vin, model_key, verdict, soft_score, highlight_bonus, total,
-                breakdown_json, scored_at, color_family, paint_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?)
+                breakdown_json, scored_at, color_family, paint_name,
+                edition, edition_provenance, edition_bonus)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(vin) DO UPDATE SET
                  model_key=excluded.model_key, verdict=excluded.verdict,
                  soft_score=excluded.soft_score, highlight_bonus=excluded.highlight_bonus,
                  total=excluded.total, breakdown_json=excluded.breakdown_json,
                  scored_at=excluded.scored_at, color_family=excluded.color_family,
-                 paint_name=excluded.paint_name""",
+                 paint_name=excluded.paint_name, edition=excluded.edition,
+                 edition_provenance=excluded.edition_provenance,
+                 edition_bonus=excluded.edition_bonus""",
             (
                 vin,
                 model_key,
@@ -876,6 +901,9 @@ class Pipeline:
                 self._now().strftime("%Y-%m-%dT%H:%M:%SZ"),
                 color.color_family if color else None,
                 color.paint_name if color else None,
+                result.edition.label if result.edition else None,
+                result.edition.provenance.value if result.edition else None,
+                result.edition_bonus,
             ),
         )
         if not self._defer_commits:

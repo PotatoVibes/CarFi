@@ -246,6 +246,11 @@ class Vehicle(BaseModel):
     # / highlight label: "claimed" | "denied" | "not_mentioned". Always claimed
     # provenance — can raise a soft score, never satisfy a hard requirement.
     claimed_features: dict[str, str] = Field(default_factory=dict)
+    # Edition-relevant listing headlines across every source's row (trim,
+    # heading, URL slug, paint name — editions.listing_text). Claimed, and
+    # read ONLY by special-edition detection: hard/highlight matching keeps
+    # its own claimed_text so this can't shift any other requirement.
+    listing_text: str = ""
 
     # Paint / color.
     paint_rpo: str | None = None
@@ -267,7 +272,7 @@ class Vehicle(BaseModel):
 # --- Scoring output --------------------------------------------------------
 
 Verdict = Literal["excluded", "needs_review", "ranked"]
-Group = Literal["hard", "soft", "highlight"]
+Group = Literal["hard", "soft", "highlight", "edition"]
 Status = Literal["pass", "fail", "needs_review", "scored", "badge"]
 
 
@@ -293,10 +298,12 @@ class ScoreResult(BaseModel):
     verdict: Verdict
     soft_score: float  # 0–100
     highlight_bonus: float  # 0–HIGHLIGHT_CAP
-    total: float  # soft_score + highlight_bonus
+    edition_bonus: float = 0.0  # 0 or EDITION_BONUS, outside the highlight cap
+    total: float  # soft_score + highlight_bonus + edition_bonus
     hard: list[RequirementResult] = Field(default_factory=list)
     soft: list[RequirementResult] = Field(default_factory=list)
     highlights: list[RequirementResult] = Field(default_factory=list)
+    edition: RequirementResult | None = None  # the factory special edition, if any
 
     @property
     def failures(self) -> list[RequirementResult]:

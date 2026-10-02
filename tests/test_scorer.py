@@ -16,7 +16,7 @@ from carfinder.models import (
     Vehicle,
 )
 from carfinder.profiles import load_profile
-from carfinder.scorer import HIGHLIGHT_CAP, match, score_vehicle
+from carfinder.scorer import EDITION_BONUS, HIGHLIGHT_CAP, MAX_TOTAL, match, score_vehicle
 
 CONFIG = Path(__file__).resolve().parents[1] / "config"
 
@@ -477,3 +477,72 @@ def test_seed_c8_z06_excluded():
     r = score_vehicle(c8, v)
     assert r.verdict == "excluded"
     assert any(f.key == "not_z06_eray" for f in r.failures)
+
+
+# --- special editions ------------------------------------------------------
+
+_Y70_VIN = "1G1YC3D44P5500628"  # real 2023 Stingray 3LT 70th Anniversary
+
+
+def _capped_profile() -> Profile:
+    return Profile(
+        name="t",
+        model_key="c8_stingray",
+        highlights=[
+            Highlight(label="a", bonus=8, matcher=Matcher(sticker_text="AAA")),
+            Highlight(label="b", bonus=8, matcher=Matcher(sticker_text="BBB")),
+        ],
+    )
+
+
+def test_edition_bonus_lands_outside_the_highlight_cap():
+    v = Vehicle(vin=_Y70_VIN, verified_rpo={"Y70"}, verified_text="AAA BBB", sticker_complete=True)
+    r = score_vehicle(_capped_profile(), v)
+    assert r.highlight_bonus == HIGHLIGHT_CAP  # 16 capped at 15 — unchanged
+    assert r.edition_bonus == EDITION_BONUS
+    assert r.total == pytest.approx(r.soft_score + HIGHLIGHT_CAP + EDITION_BONUS)
+    assert r.edition.key == "c8_70th_anniversary"
+    assert r.edition.group == "edition"
+    assert r.edition.provenance == Provenance.verified
+    assert r.edition.bonus == EDITION_BONUS
+    assert "Y70" in r.edition.detail
+    assert MAX_TOTAL == 100 + HIGHLIGHT_CAP + EDITION_BONUS
+
+
+def test_no_edition_adds_nothing():
+    v = Vehicle(vin="1G1YC3D41P5108000", verified_text="AAA", sticker_complete=True)
+    r = score_vehicle(_capped_profile(), v)
+    assert r.edition is None
+    assert r.edition_bonus == 0.0
+    assert r.total == pytest.approx(r.soft_score + 8)
+
+
+def test_claimed_edition_still_bumps_score_but_never_a_hard_requirement():
+    p = Profile(
+        name="t",
+        model_key="gr_supra",
+        hard=[
+            HardConstraint(
+                key="manual",
+                label="Manual",
+                matcher=Matcher(sticker_text="6-SPEED MANUAL"),
+            )
+        ],
+    )
+    v = Vehicle(vin="WZ1DB0G08PW054589", listing_text="A91-MT Edition")
+    r = score_vehicle(p, v)
+    assert r.edition.provenance == Provenance.claimed
+    assert r.edition_bonus == EDITION_BONUS
+    # Edition text is its own input: it can't satisfy (or even claim) a hard
+    # requirement — the manual gate still has no evidence.
+    assert r.hard[0].provenance == Provenance.unknown
+    assert r.verdict == "needs_review"
+
+
+def test_edition_score_is_monotone_with_soft_score():
+    # The bump is flat: it never reorders two editions (or two non-editions)
+    # relative to each other.
+    p = _numeric_profile()
+    cheap = score_vehicle(p, Vehicle(vin=_Y70_VIN, verified_rpo={"Y70"}, price=60000, miles=1))
+    dear = score_vehicle(p, Vehicle(vin=_Y70_VIN, verified_rpo={"Y70"}, price=69000, miles=1))
+    assert cheap.total - dear.total == pytest.approx(cheap.soft_score - dear.soft_score)

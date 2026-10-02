@@ -42,6 +42,9 @@ class MatchRow:
     distance_mi: int | None = None  # from the configured home zip
     color_family: str | None = None  # scorer-resolved (match_results)
     paint_name: str | None = None
+    edition: str | None = None  # factory special-edition label (editions.py)
+    edition_provenance: str | None = None  # verified | claimed
+    edition_bonus: float = 0.0
 
     @property
     def location(self) -> str | None:
@@ -84,7 +87,8 @@ def ranked_matches(
         SELECT v.vin, m.model_key, v.year, v.make, v.model, v.trim, v.color,
                v.miles, v.price, m.verdict, m.total, m.soft_score, m.highlight_bonus,
                v.status, s.status AS sticker_status, v.first_seen, v.dismissed_at,
-               v.favorited_at, v.city, v.state, v.zip, m.color_family, m.paint_name
+               v.favorited_at, v.city, v.state, v.zip, m.color_family, m.paint_name,
+               m.edition, m.edition_provenance, m.edition_bonus
         FROM match_results m
         JOIN vehicles v ON v.vin = m.vin
         LEFT JOIN stickers s ON s.vin = v.vin
@@ -122,6 +126,9 @@ def ranked_matches(
             distance_mi=geo.zip_distance_miles(home_zip, r["zip"]) if home_zip else None,
             color_family=r["color_family"],
             paint_name=r["paint_name"],
+            edition=r["edition"],
+            edition_provenance=r["edition_provenance"],
+            edition_bonus=r["edition_bonus"],
         )
         for r in rows
     ]
@@ -160,7 +167,12 @@ def vehicle_detail(
     if v is None:
         return None
     m = conn.execute("SELECT * FROM match_results WHERE vin = ?", (vin,)).fetchone()
-    breakdown = json.loads(m["breakdown_json"]) if m else {"hard": [], "soft": [], "highlights": []}
+    breakdown = (
+        json.loads(m["breakdown_json"])
+        if m
+        else {"hard": [], "soft": [], "highlights": [], "edition": None}
+    )
+    breakdown.setdefault("edition", None)  # rows scored before special editions
     s = conn.execute("SELECT * FROM stickers WHERE vin = ?", (vin,)).fetchone()
     conflicts = [
         {"field": c["field"], "winner": c["winner"], "values": json.loads(c["values_json"])}

@@ -32,6 +32,20 @@ def test_ui_read_indexes_exist():
     assert any("idx_listings_vin" in r[-1] for r in plan)
 
 
+def test_match_results_carry_special_edition_columns():
+    """Migration 13: the board renders the edition badge from match_results
+    alone; rows predating it read as 'no edition', bonus 0."""
+    conn = _mem()
+    cols = {r[1]: r for r in conn.execute("PRAGMA table_info(match_results)")}
+    assert {"edition", "edition_provenance", "edition_bonus"} <= set(cols)
+    conn.execute(
+        """INSERT INTO match_results (vin, model_key, verdict, soft_score, highlight_bonus,
+           total, breakdown_json, scored_at) VALUES ('V','m','ranked',1,0,1,'{}','t')"""
+    )
+    row = conn.execute("SELECT edition, edition_bonus FROM match_results").fetchone()
+    assert row["edition"] is None and row["edition_bonus"] == 0
+
+
 def test_api_calls_table_exists():
     conn = _mem()
     cols = {r[1] for r in conn.execute("PRAGMA table_info(api_calls)")}

@@ -5,6 +5,7 @@ Pipeline per vehicle:
      never satisfy a hard requirement).
   2. Soft dimensions -> weighted 0–100 score (linear penalty curves).
   3. Highlights -> bonus, capped at +15 total.
+  4. Factory special edition (editions.py) -> a flat +5, outside that cap.
 Output carries a per-requirement breakdown with a provenance tag on each.
 """
 
@@ -12,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import colors
+from . import colors, editions
 from .models import (
     HardConstraint,
     Highlight,
@@ -26,6 +27,12 @@ from .models import (
 )
 
 HIGHLIGHT_CAP = 15.0
+# A special edition is worth a flat bump OUTSIDE the highlight cap — most
+# edition cars carry both carbon packages and already sit at the cap, where a
+# capped +5 would add nothing. Kept out of highlight_bonus too, so it can't
+# push a car over the unicorn bar (store.unicorn_arrivals).
+EDITION_BONUS = 5.0
+MAX_TOTAL = 100.0 + HIGHLIGHT_CAP + EDITION_BONUS
 
 
 @dataclass(frozen=True)
@@ -280,6 +287,23 @@ def _evaluate_highlight(h: Highlight, vehicle: Vehicle) -> RequirementResult:
     )
 
 
+def _evaluate_edition(model_key: str, vehicle: Vehicle) -> RequirementResult | None:
+    found = editions.detect(model_key, vehicle)
+    if found is None:
+        return None
+    e = found.edition
+    return RequirementResult(
+        key=e.key,
+        label=e.label,
+        group="edition",
+        status="badge",
+        provenance=found.provenance,
+        detail=f"{found.evidence} · {e.note}",
+        matched=True,
+        bonus=EDITION_BONUS,
+    )
+
+
 # --- Top level -------------------------------------------------------------
 
 
@@ -299,9 +323,11 @@ def score_vehicle(profile: Profile, vehicle: Vehicle) -> ScoreResult:
     soft_evals = [_evaluate_soft(c, vehicle, profile.model_key) for c in profile.soft]
 
     highlights = [_evaluate_highlight(h, vehicle) for h in profile.highlights]
+    edition = _evaluate_edition(profile.model_key, vehicle)
 
     soft_score = _weighted_soft_score(soft_evals)
     highlight_bonus = min(sum(h.bonus or 0.0 for h in highlights), HIGHLIGHT_CAP)
+    edition_bonus = EDITION_BONUS if edition is not None else 0.0
 
     hard_fail = any(r.status == "fail" for r in hard)
     soft_breach = any(e.breach for e in soft_evals)
@@ -319,8 +345,10 @@ def score_vehicle(profile: Profile, vehicle: Vehicle) -> ScoreResult:
         verdict=verdict,
         soft_score=round(soft_score, 4),
         highlight_bonus=highlight_bonus,
-        total=round(soft_score + highlight_bonus, 4),
+        edition_bonus=edition_bonus,
+        total=round(soft_score + highlight_bonus + edition_bonus, 4),
         hard=hard,
         soft=[e.result for e in soft_evals],
         highlights=highlights,
+        edition=edition,
     )
