@@ -242,15 +242,25 @@ def test_supra_edition_rides_marketcheck_listing_text_not_autodev_trim():
         "marketcheck",
         SUPRA_MT_VIN,
         {
-            "heading": "2023 Toyota GR Supra 3.0",
+            "heading": "2023 Toyota GR Supra 3.0 6MT Manual Transmission",
             "build": {"trim": "A91-MT Edition", "version": "3.0 A91-MT Edition"},
             "dealer": {"name": "Burnout Garage"},
         },
     )
+    assert _hard(conn, SUPRA_MT_VIN)["manual_transmission"]["provenance"] == "unknown"
     pipe.rescore(profile)
     m = conn.execute("SELECT * FROM match_results WHERE vin=?", (SUPRA_MT_VIN,)).fetchone()
     assert m["edition"] == "A91-MT Edition"
     assert m["edition_provenance"] == "claimed"
     assert m["edition_bonus"] == 5.0
-    # Listing text feeds the edition only — the manual gate is untouched by it.
-    assert _hard(conn, SUPRA_MT_VIN)["manual_transmission"]["status"] == "needs_review"
+    # Listing text feeds the edition only: the heading's "6MT Manual
+    # Transmission" would claim the manual gate if it leaked into claimed_text.
+    assert _hard(conn, SUPRA_MT_VIN)["manual_transmission"]["provenance"] == "unknown"
+
+
+def test_autodev_final_edition_trim_never_reaches_a_2026_supra():
+    # Real 2026 3.0 Premium M/T that Auto.dev mislabels "MkV Final Edition".
+    fe_vin = "WZ1DB0G05TW071957"
+    pipe, conn = _pipeline([])
+    _insert_listing(conn, "autodev", fe_vin, {"vehicle.trim": "MkV Final Edition"})
+    assert "Final Edition" not in pipe._listing_text(fe_vin)

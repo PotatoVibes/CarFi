@@ -27,9 +27,10 @@ from .models import (
 )
 
 HIGHLIGHT_CAP = 15.0
-# A special edition is worth a flat bump OUTSIDE the highlight cap — most
-# edition cars carry both carbon packages and already sit at the cap, where a
-# capped +5 would add nothing. Kept out of highlight_bonus too, so it can't
+# A special edition is worth a flat bump OUTSIDE the highlight cap — edition
+# packages bundle the options highlights reward (every Blackwing edition with
+# factory data, 29/29, already sits at the cap), where a capped +5 would add
+# nothing. Kept out of highlight_bonus too, so it can't
 # push a car over the unicorn bar (store.unicorn_arrivals).
 EDITION_BONUS = 5.0
 MAX_TOTAL = 100.0 + HIGHLIGHT_CAP + EDITION_BONUS

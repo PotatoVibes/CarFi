@@ -21,7 +21,7 @@ Evidence precedence mirrors scorer.match():
 
 Every rule is gated by a VIN scope pinning model line + model year (pos 10):
 GM reuses option codes across years (CFY marks the 5 IMSA cars in 2022 but
-388 ordinary Stingrays in 2023), CT4 ZL* codes are generic per-model
+357 non-edition Stingrays in 2023), CT4 ZL* codes are generic per-model
 "designer theme" slots, and phrases like "IMSA" or "Launch Edition" name
 editions of other models.
 
@@ -37,14 +37,15 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import unquote_plus
 
 from .models import Provenance, Vehicle
 
-# Between words in listing text: spaces, punctuation, URL-slug dashes/pluses
-# and %-escapes ("imsa-gtlm-championship-edition", "Stars%20%26%20Steel").
-# The alternatives are disjoint ('%' only as an escape) so a long run of
-# punctuation can't backtrack exponentially.
-_SEP = r"(?:%[0-9A-Fa-f]{2}|[^\w%]|_)*"
+# Between words in listing text: spaces, punctuation, URL-slug dashes. (%-escapes
+# and underscores are normalized to spaces by listing_text() first — "\b" would
+# otherwise see "%20A91" or "_a91" as one word.) One character class, so a long
+# run of punctuation can't backtrack exponentially.
+_SEP = r"[\W_]*"
 
 
 def _rx(pattern: str) -> re.Pattern[str]:
@@ -82,8 +83,9 @@ _C8_3LT = r"^1G1YC[23]D4[0-9X]"
 # 2023's unified series). Cadillac numbers its editions in pos 12-17: '5',
 # then 1 (auto) / 6 (manual), then the edition digit, then the plaque number
 # (GM-published plaque format "4-5[1|6][1|2|3][001-066]" for the 2024s).
-# Corpus: 33/33 edition-block VINs are editions, every regular CT4 has pos
-# 12 = '1'. The block is complete AND definitive, so these rules carry no
+# Corpus: 29/29 block VINs with factory data are editions (4 more have none)
+# and 0 of 385 regular Blackwings use pos 12 = '5' (they use '4'; pilot cars
+# '2'). The block is complete AND definitive, so these rules carry no
 # listing-text path — a claim from outside the block could only be wrong.
 _BW = r"^1G6D[67L]5RP[0-9X]"
 
@@ -97,7 +99,7 @@ _CATALOG: dict[str, tuple[Edition, ...]] = {
             rpo=frozenset({"ZCR"}),
             sticker_text=_rx(r"IMSA\s+GTLM|C8\.?R\s+(?:SPECIAL\s+)?EDITION"),
             listing_text=_rx(
-                rf"\bi\.?m\.?s\.?a\.?{_SEP}(?:gtlm|championship)\b|\bgtlm\b"
+                rf"\bi\.?m\.?s\.?a\.?{_SEP}(?:gtlm|championship|edition)\b|\bgtlm\b"
                 rf"|\bc8{_SEP}r{_SEP}(?:special{_SEP})?edition\b"
                 rf"|\bchampionship{_SEP}(?:c8{_SEP}r{_SEP})?edition\b"
             ),
@@ -260,9 +262,10 @@ _CATALOG: dict[str, tuple[Edition, ...]] = {
             label="MkV Final Edition",
             note="2026, last-year GT4-style send-off",
             scope=_rx(r"^WZ1DB0G[0-9A-Z][0-9X]T"),
+            # "Final Edition", never bare "final": 2026 IS the last MkV year,
+            # so "MkV final year!" is ordinary dealer copy on a 3.0 Premium.
             listing_text=_rx(
-                rf"\bmk{_SEP}(?:v|5){_SEP}final\b|\bfinal{_SEP}edition\b"
-                rf"|\bgt4{_SEP}style\b|\bburnout\b|\bundercover\b"
+                rf"\bfinal{_SEP}edition\b|\bgt4{_SEP}style\b|\bburnout\b|\bundercover\b"
             ),
         ),
     ),
@@ -333,7 +336,8 @@ def listing_text(rows: Iterable[tuple[str, dict[str, Any]]], make: str | None) -
                 continue
             value = _lookup(raw, path)
             if isinstance(value, str) and value.strip():
-                parts.append(value.strip())
+                # URL slugs: "GR%20Supra-3.0%20A91-MT" / "a91_mt_edition" -> words.
+                parts.append(unquote_plus(value.strip()).replace("_", " "))
     return " | ".join(parts)
 
 

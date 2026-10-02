@@ -899,3 +899,21 @@ def test_ordinary_car_persists_no_edition():
     assert m["edition"] is None and m["edition_provenance"] is None
     assert m["edition_bonus"] == 0
     assert json.loads(m["breakdown_json"])["edition"] is None
+
+
+def test_edition_scopes_on_the_pipeline_vin_when_the_sticker_lost_its_own():
+    # The parser's token-harvest fallback can recover options but not the VIN
+    # from a mangled embedded JSON blob — the edition must survive that.
+    from carfinder.scorer import score_vehicle
+    from carfinder.sticker_parser import ParsedSticker
+
+    vin = "1G6DL5RP6P0511022"  # real 2023 Watkins Glen IMSA Edition
+    parsed = ParsedSticker(
+        vin=None, year=2023, options={"ZLE"}, text="WATKINS GLEN IMSA EDITION", confidence=0.8
+    )
+    pipe, _ = _pipeline([])
+    vehicle = pipe._build_vehicle(vin, "ct4v_blackwing", parsed, None, {})
+    assert vehicle.vin == vin
+    result = score_vehicle(load_profile(ROOT / "config" / "ct4v_blackwing.yaml"), vehicle)
+    assert result.edition.label == "Watkins Glen IMSA Edition"
+    assert result.edition_bonus == 5.0

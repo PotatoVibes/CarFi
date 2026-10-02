@@ -59,6 +59,7 @@ def test_c8_imsa_sticker_line_and_listing_slug():
     )
     assert found.edition.key == "c8_imsa_gtlm_c8r"
     assert found.provenance == Provenance.claimed
+    assert _key("c8_stingray", "1G1YC2D44N5102150", listing_text="Stingray 3LT IMSA Edition")
 
 
 def test_c8_imsa_text_never_fires_outside_2022():
@@ -162,7 +163,10 @@ def test_c8_regular_car_is_not_an_edition():
     ],
 )
 def test_blackwing_editions_by_code_and_by_vin_serial(vin, code, key):
-    assert _key("ct4v_blackwing", vin, verified_rpo={code}) == key
+    # The code alone, on a regular-serial VIN of the same year (a pilot build).
+    regular = f"1G6D65RP0{vin[9]}0460100"  # synthetic
+    found = _detect("ct4v_blackwing", regular, verified_rpo={code})
+    assert found.edition.key == key and code in found.evidence
     # The serial block (pos 12 '5' + trans + edition digit + plaque number)
     # identifies the same car with no factory data at all.
     found = _detect("ct4v_blackwing", vin)
@@ -347,6 +351,53 @@ def test_listing_text_reads_headline_fields_per_source():
     # Never dealer identity/location, photo URLs, or pasted page text.
     for leak in ("Burnout", "Sebring", "45th", "a91mt", "Similar"):
         assert leak not in text, leak
+
+
+def test_listing_text_decodes_url_escapes_and_underscores():
+    # "\b" can't see a word boundary in "%20A91" or "_a91" — listing_text()
+    # turns slugs into words first.
+    pct = editions.listing_text(
+        [
+            (
+                "marketcheck",
+                {
+                    "vdp_url": "https://d.example/Used-2023-Toyota-GR%20Supra-3.0%20A91-MT%20Edition-WZ1"
+                },
+            )
+        ],
+        make="toyota",
+    )
+    assert _key("gr_supra", "WZ1DB0G08PW054589", listing_text=pct) == "gr_supra_a91_mt_edition"
+    under = editions.listing_text(
+        [
+            (
+                "marketcheck",
+                {
+                    "vdp_url": "https://d.example/details-2024_toyota_gr_supra_45th_anniversary_edition-used-x.html"
+                },
+            )
+        ],
+        make="toyota",
+    )
+    assert _key("gr_supra", "WZ1DB0G04RW062336", listing_text=under) == "gr_supra_45th_anniversary"
+    amp = editions.listing_text(
+        [
+            (
+                "marketcheck",
+                {"vdp_url": "https://d.example/Corvette%20Stingray-3LT%20Stars%20%26%20Steel-1G1"},
+            )
+        ],
+        make="gm",
+    )
+    found = _detect("c8_stingray", "1G1YC3D46T5107093", listing_text=amp)
+    assert found.edition.key == "c8_stars_and_steel"
+    assert "Stars & Steel" in found.evidence
+
+
+def test_supra_final_year_marketing_is_not_the_final_edition():
+    # 2026 is the last MkV year — dealers say so about every 3.0 Premium.
+    for text in ("2026 GR Supra 3.0 Premium - MKV Final Year! 6MT", "mk5-final-model-year"):
+        assert _key("gr_supra", "WZ1DB0G05TW071957", listing_text=text) is None, text
 
 
 def test_listing_text_skips_autodev_trim_for_non_gm():

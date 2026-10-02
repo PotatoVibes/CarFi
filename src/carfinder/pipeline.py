@@ -768,6 +768,10 @@ class Pipeline:
 
         if parsed is not None:
             kw = vehicle_kwargs(parsed, model_key)
+            # The pipeline VIN is the identity (the sticker was fetched BY it);
+            # the parser can lose its copy when the embedded JSON is mangled,
+            # and edition detection scopes on vehicle.vin.
+            kw["vin"] = vin
             kw["miles"] = miles
             kw["price"] = price
             if kw.get("year") is None:

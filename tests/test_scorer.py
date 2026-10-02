@@ -518,24 +518,21 @@ def test_no_edition_adds_nothing():
 
 
 def test_claimed_edition_still_bumps_score_but_never_a_hard_requirement():
+    # Both matchers WOULD hit the listing text if it leaked into claimed_text.
     p = Profile(
         name="t",
         model_key="gr_supra",
-        hard=[
-            HardConstraint(
-                key="manual",
-                label="Manual",
-                matcher=Matcher(sticker_text="6-SPEED MANUAL"),
-            )
-        ],
+        hard=[HardConstraint(key="mt", label="A91-MT", matcher=Matcher(sticker_text="A91-MT"))],
+        highlights=[Highlight(label="h", bonus=3, matcher=Matcher(sticker_text="A91-MT"))],
     )
     v = Vehicle(vin="WZ1DB0G08PW054589", listing_text="A91-MT Edition")
     r = score_vehicle(p, v)
     assert r.edition.provenance == Provenance.claimed
     assert r.edition_bonus == EDITION_BONUS
     # Edition text is its own input: it can't satisfy (or even claim) a hard
-    # requirement — the manual gate still has no evidence.
+    # requirement, nor earn a highlight.
     assert r.hard[0].provenance == Provenance.unknown
+    assert r.highlight_bonus == 0
     assert r.verdict == "needs_review"
 
 
