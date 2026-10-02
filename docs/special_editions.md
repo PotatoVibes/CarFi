@@ -8,8 +8,8 @@ medal next to the score) shows on every board row with an edition, not only
 ranked ones: unlike the unicorn bar, it's a fact about the car.
 
 **Corpus** = read-only snapshot of the live DB: 1,083 parsed window stickers,
-649 gmpartsgiant build sheets and 15,658 listing rows across Auto.dev,
-Marketcheck and manual sources.
+649 build sheets (587 gmpartsgiant, 62 BMW/Toyota partsdeal decodes) and
+15,658 listing rows across Auto.dev, Marketcheck and manual sources.
 
 ## How a car is identified
 
@@ -40,6 +40,9 @@ Auto.dev's "3.0" overwrote a Marketcheck "A91-MT Edition". Fields read:
 - Auto.dev: `vehicle.trim` (GM makes only), exterior color, VDP URL.
 - Manual: the URL.
 
+URL escapes and underscores are decoded to spaces first, so
+`GR%20Supra-3.0%20A91-MT%20Edition` and `a91_mt_edition` slugs read as words.
+
 Fields never read:
 
 - Dealer name, address and city ("Alan Jay Cadillac of **Sebring**", "**Burnout**
@@ -68,8 +71,9 @@ sequence thread, GM Authority / CorvetteForum Stars & Steel pricing (USA $9,995)
 Cadillac numbers these editions in VIN positions 12–17: `5`, then `1` (auto) or
 `6` (manual), then the edition digit, then the plaque number. This matches the
 GM-published Mondrian plaque format `4-5[1|6][1|2|3][001-066]`. In the corpus,
-33 of 33 edition-block VINs are editions and every regular CT4 has position 12 =
-`1`. Because the block is complete and definitive, **these rules have no
+29 of 29 block VINs with factory data are editions (4 more have none), and 0 of
+385 regular Blackwings use position 12 = `5`. Regular Blackwings use `4`, pilot
+cars `2`, and base CT4s `1`. Because the block is complete and definitive, **these rules have no
 listing-text path**: a claim on a car outside the block can only be wrong.
 
 | Edition | Year | Built | RPO | Serial block | Sticker line |
@@ -117,7 +121,7 @@ hard bound, so a real one lands *excluded* (badge visible with "show excluded").
 | A91-CF Edition | 2022 | 600 | "A91-CF" |
 | **A91-MT Edition** | 2023 | 500, manual only | "A91-MT", CU Later Gray / Burnout paint |
 | 45th Anniversary Edition | 2024 | 900 | "45th Anniversary", Mikan Blast paint |
-| MkV Final Edition | 2026 | ~1,300 | "MkV Final", "Final Edition", "GT4-Style", Burnout / Undercover paint |
+| MkV Final Edition | 2026 | ~1,300 | "Final Edition", "GT4-Style", Burnout / Undercover paint (never bare "final": 2026 *is* the last MkV year) |
 
 Why it's claimed only:
 
@@ -145,7 +149,8 @@ These look like editions but aren't, so they never earn the badge:
 - **Standard content on every car of a year:**
   - 2024 "20TH ANNIVERSARY OF V-SERIES COMMEMORATIVE CONTENT", on 38/38 Blackwings.
   - 2023 70th badging, rear-glass etching and dedication plaque.
-  - 2023 CFY "dedication plaque", on 388 ordinary Stingrays.
+  - 2023 CFY "dedication plaque", on 357 non-edition Stingrays (388 including
+    the 31 Y70 cars).
 - **Accessories and dealer add-ons:**
   - The $460 "70th Anniversary indoor car cover".
   - The C8.R-rendered car cover (WL0/WKR).
