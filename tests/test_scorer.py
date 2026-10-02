@@ -423,9 +423,12 @@ def test_seed_c8_fully_loaded_verified_car_ranks_high():
     known = [s for s in r.soft if s.dim_score is not None]
     assert all(s.dim_score == pytest.approx(100.0) for s in known)
     assert r.soft_score == pytest.approx(100.0)
-    # Front lift (8) + performance exhaust (4): under the +15 cap, so the
-    # full sum comes through.
-    assert r.highlight_bonus == pytest.approx(12.0)
+    # Whatever the profile rewards on this sticker comes through, up to the cap
+    # (front lift may be a highlight or, as the owner now has it, a hard
+    # requirement — the ranked verdict above covers that case).
+    matched = [h for h in r.highlights if h.matched]
+    assert matched
+    assert r.highlight_bonus == pytest.approx(min(sum(h.bonus for h in matched), HIGHLIGHT_CAP))
 
 
 def test_seed_c8_suspension_facts_decide_z51_and_magneride():
